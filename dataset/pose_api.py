@@ -8,6 +8,7 @@ from collections import defaultdict
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from pycocotools import mask as maskUtils
+from PIL import Image
 
 
 class Pose:
@@ -276,10 +277,13 @@ class PoseTrack(Pose):
         self.dataset_count += 1
         for annotations in dataset['annolist']:
             img_name = annotations['image'][0]['name']
+            img_path = os.path.join(self.image_dir, img_name)
+            im = Image.open(img_path)
+            width, height = im.size
             img_id = self.dataset_count*10000 + annotations['imgnum'][0]
             self.imgs[img_id] = {'file_name': img_name,
-                                 'height': None,
-                                 'width': None}
+                                 'height': height,
+                                 'width': width}
             if not annotations['is_labeled']:
                 continue
             persons = annotations['annorect']
@@ -302,6 +306,18 @@ class PoseTrack(Pose):
                         keypoints_clean[kp_idx] = [x, y, v]
                 self.anns[img_id].append({'keypoints': keypoints_clean})
 
+            if 'ignore_regions' in annotations.keys():
+                ignore_regions = annotations['ignore_regions']
+                polygons = []
+                for reg in ignore_regions:
+                    polygon = []
+                    polygon_pts = reg['point']
+                    for point in polygon_pts:
+                        polygon.append(point['x'][0])
+                        polygon.append(point['y'][0])
+                    polygons.append(polygon)
+                self.masks[img_id].append({'ignore_region': polygons})
+
     def create_index(self):
         kp_dict = {0: 'right_ankle',
                    1: 'right_knee',
@@ -322,7 +338,7 @@ class PoseTrack(Pose):
         print('creating index...')
         self.imgs, self.anns, self.masks = {}, defaultdict(list), defaultdict(list)
 
-        for dataset in self.datasets:
+        for dataset in tqdm(self.datasets):
             self._build_dataset(dataset, kp_dict)
 
         print('index created!')
