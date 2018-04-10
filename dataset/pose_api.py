@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from pycocotools import mask as maskUtils
 from PIL import Image
+import cv2
 
 
 class Pose:
@@ -59,10 +60,16 @@ class Pose:
     def create_index(self):
         return
 
-    def display_anns(self, img_id):
+    def display_anns(self, img_id, show_mask=False):
         filename = self.imgs[img_id]['file_name']
         img_file = os.path.join(self.image_dir, filename)
         img = plt.imread(img_file)
+        if show_mask:
+            mask_img = np.zeros_like(img)
+            mask = self.get_mask(img_id)
+            if mask is not None:
+                mask_img[:, :, 0] = 255. * mask
+                img = cv2.addWeighted(img, 1., mask_img, 0.5, 0)
         plt.imshow(img)
         sks = np.array(self.skeleton)
         colors = cm.jet(np.linspace(0, 1, self.num_keypoints))
@@ -106,6 +113,8 @@ class Pose:
         :return: binary mask (numpy 2D array)
         """
         rles = self.get_mask_rles(img_id)
+        if len(rles) == 0:
+            return None
         rle = maskUtils.merge(rles)
         m = maskUtils.decode(rle)
         return m
@@ -162,6 +171,9 @@ class COCO(Pose):
                 elif vs[4] > 0:
                     face_center = np.array([xs[4], ys[4], 1])
                     keypoints[2] = (face_center + 3. * keypoints[2]) / 4.
+                elif vs[11] > 0 and vs[12] > 0:
+                    waist_center = np.array([np.mean(xs[11:13]), np.mean(ys[11:13]), 1])
+                    keypoints[2] = (5. * keypoints[2] - waist_center) / 4.
                 keypoints[2, 2] = np.int(keypoints[2, 2])
             # hack for head top
             face_center = [-1, -1]
