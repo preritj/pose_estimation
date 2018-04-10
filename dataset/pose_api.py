@@ -124,8 +124,10 @@ class COCO(Pose):
             if ann['category_id'] != 1:
                 continue
             area = ann['area']
+            img = imgs[ann['image_id']]
+            img_area = img['height'] * img['width']
             num_keypoints = ann['num_keypoints']
-            if ann['iscrowd'] or (area > 80000.) or (num_keypoints < 2):
+            if ann['iscrowd'] or (area > .25 * img_area) or (num_keypoints < 2):
                 ignore_region = ann['segmentation']
                 masks[ann['image_id']].append(
                             {'ignore_region': ignore_region})
