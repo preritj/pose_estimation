@@ -1,6 +1,6 @@
+from collections import defaultdict
 import numpy as np
 from tqdm import tqdm
-from collections import defaultdict
 from pose_data import Pose
 
 
