@@ -22,9 +22,18 @@ class MobilenetPose(Model):
         self._num_keypoints = 15
         super().__init__()
 
+    def get_output_shape(self):
+        h, w = self._input_shape
+        return h / 4, w / 4, self._num_keypoints
+
     def preprocess(self, inputs):
         """Image preprocessing"""
         return (2.0 / 255.0) * inputs - 1.0
+
+    def build_net(self, preprocessed_inputs):
+        image_features = self.encoder(preprocessed_inputs)
+        out = self.decoder(image_features)
+        return out
 
     def encoder(self, preprocessed_inputs, scope=None):
         with tf.variable_scope(scope, 'encoder', preprocessed_inputs):
