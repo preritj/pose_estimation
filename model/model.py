@@ -9,10 +9,15 @@ class Model:
     def __init__(self):
         pass
 
-    def encoder(self):
+    def preprocess(self, inputs):
+        """Image preprocessing"""
         pass
 
-    def decoder(self):
+    def encoder(self, preprocessed_inputs):
+        """Generates features"""
+        pass
+
+    def decoder(self, image_features):
         pass
 
 

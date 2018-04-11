@@ -4,7 +4,7 @@ Pose estimation using mobilenet v2
 
 import collections
 import tensorflow as tf
-from nets.mobilenet_v2 import inverted_residual_bottleneck
+from nets import mobilenet_v2 as mobilenet
 from utils import ops
 from model import Model
 
@@ -15,8 +15,20 @@ class MobilenetPose(Model):
     def __init(self):
         super().__init__()
 
-    def encoder(self):
-        pass
+    def preprocess(self, inputs):
+        """Image preprocessing"""
+        return (2.0 / 255.0) * inputs - 1.0
+
+    def encoder(self, preprocessed_inputs, scope=None):
+        with tf.variable_scope(scope, 'encoder', preprocessed_inputs):
+            with slim.arg_scope(mobilenet.mobilenet_v2_arg_scope()):
+                _, image_features = mobilenet.mobilenet_v2_base(
+                    preprocessed_inputs,
+                    final_endpoint='InvertedResidual_160_2',
+                    min_depth=8,
+                    depth_multiplier=1.0,
+                    scope=scope)
+        return image_features
 
     def decoder(image_features, depth, scope=None):
         """Builds decoder layers
@@ -29,8 +41,7 @@ class MobilenetPose(Model):
           feature_maps: an OrderedDict mapping keys (feature map names) to
             tensors where each tensor has shape [batch, height_i, width_i, depth_i].
         """
-        with tf.variable_scope(
-                scope, 'fpn_decoder', image_features):
+        with tf.variable_scope(scope, 'decoder', image_features):
             num_levels = len(image_features)
             output_feature_maps_list = []
             output_feature_map_keys = []
@@ -45,7 +56,7 @@ class MobilenetPose(Model):
 
                 for level in reversed(range(num_levels - 1)):
                     top_down = ops.nearest_neighbor_upsampling(top_down, 2)
-                    feature_map = inverted_residual_bottleneck(net, depth(conv_def.depth), stride, conv_def.t, scope=end_point)
+                    feature_map = mobilenet.inverted_residual_bottleneck(net, depth(conv_def.depth), stride, conv_def.t, scope=end_point)
                     residual = slim.conv2d(
                         image_features[level], depth, [1, 1],
                         scope='projection_%d' % (level + 1))
