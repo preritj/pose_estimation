@@ -7,6 +7,7 @@ import tensorflow as tf
 
 class Model:
     def __init__(self):
+        self._is_training = True
         pass
 
     def preprocess(self, inputs):

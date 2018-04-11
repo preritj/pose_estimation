@@ -75,8 +75,8 @@
       <file leaf-file-name="model.py" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/model/model.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="360">
-              <caret line="20" column="12" lean-forward="true" selection-start-line="20" selection-start-column="12" selection-end-line="20" selection-end-column="12" />
+            <state relative-caret-position="162">
+              <caret line="9" column="32" lean-forward="false" selection-start-line="9" selection-start-column="32" selection-end-line="9" selection-end-column="32" />
               <folding />
             </state>
           </provider>
@@ -85,8 +85,8 @@
       <file leaf-file-name="mobilenet_pose.py" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/model/mobilenet_pose.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="594">
-              <caret line="44" column="44" lean-forward="true" selection-start-line="44" selection-start-column="44" selection-end-line="44" selection-end-column="44" />
+            <state relative-caret-position="864">
+              <caret line="48" column="51" lean-forward="true" selection-start-line="48" selection-start-column="51" selection-end-line="48" selection-end-column="51" />
               <folding>
                 <element signature="e#44#62#0" expanded="true" />
               </folding>
@@ -97,7 +97,7 @@
       <file leaf-file-name="mobilenet_v2.py" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/nets/mobilenet_v2.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="87">
+            <state relative-caret-position="320">
               <caret line="293" column="26" lean-forward="false" selection-start-line="293" selection-start-column="4" selection-end-line="293" selection-end-column="26" />
               <folding>
                 <element signature="e#529#567#0" expanded="true" />
@@ -366,7 +366,7 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/nets/mobilenet_v2.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="87">
+        <state relative-caret-position="320">
           <caret line="293" column="26" lean-forward="false" selection-start-line="293" selection-start-column="4" selection-end-line="293" selection-end-column="26" />
           <folding>
             <element signature="e#529#567#0" expanded="true" />
@@ -376,16 +376,16 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/model/model.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="360">
-          <caret line="20" column="12" lean-forward="true" selection-start-line="20" selection-start-column="12" selection-end-line="20" selection-end-column="12" />
+        <state relative-caret-position="162">
+          <caret line="9" column="32" lean-forward="false" selection-start-line="9" selection-start-column="32" selection-end-line="9" selection-end-column="32" />
           <folding />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/model/mobilenet_pose.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="594">
-          <caret line="44" column="44" lean-forward="true" selection-start-line="44" selection-start-column="44" selection-end-line="44" selection-end-column="44" />
+        <state relative-caret-position="864">
+          <caret line="48" column="51" lean-forward="true" selection-start-line="48" selection-start-column="51" selection-end-line="48" selection-end-column="51" />
           <folding>
             <element signature="e#44#62#0" expanded="true" />
           </folding>

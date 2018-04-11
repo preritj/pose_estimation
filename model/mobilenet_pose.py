@@ -13,6 +13,11 @@ slim = tf.contrib.slim
 
 class MobilenetPose(Model):
     def __init(self):
+        self._depth_multiplier = 1.0
+        self._min_depth = 8
+        self._feature_layers = ['InvertedResidual_32_2',
+                                'InvertedResidual_64_3',
+                                'InvertedResidual_160_2']
         super().__init__()
 
     def preprocess(self, inputs):
@@ -21,20 +26,22 @@ class MobilenetPose(Model):
 
     def encoder(self, preprocessed_inputs, scope=None):
         with tf.variable_scope(scope, 'encoder', preprocessed_inputs):
-            with slim.arg_scope(mobilenet.mobilenet_v2_arg_scope()):
+            with slim.arg_scope(mobilenet.mobilenet_v2_arg_scope(
+                is_training=self._is_training)
+            ):
                 _, image_features = mobilenet.mobilenet_v2_base(
                     preprocessed_inputs,
-                    final_endpoint='InvertedResidual_160_2',
-                    min_depth=8,
-                    depth_multiplier=1.0,
+                    final_endpoint=self._feature_layers[-1],
+                    min_depth=self._min_depth,
+                    depth_multiplier=self._depth_multiplier,
                     scope=scope)
         return image_features
 
-    def decoder(image_features, depth, scope=None):
-        """Builds decoder layers
+    def decoder(self, image_features, depth=160, scope=None):
+        """Builds decoder
         Args:
-          image_features: list of image feature tensors. Spatial resolutions of
-            succesive tensors must reduce exactly by a factor of 2.
+          image_features: list of image feature tensors to be used for
+            skip connections
           depth: depth of output feature maps.
           scope: A scope name to wrap this op under.
         Returns:
