@@ -18,7 +18,8 @@ class MobilenetPose(Model):
         self._skip_layers = ['InvertedResidual_32_2',
                              'InvertedResidual_64_3',
                              'InvertedResidual_160_2']
-        self._fpn_depth = 160
+        self._fpn_depth = 96
+        self._num_keypoints = 15
         super().__init__()
 
     def preprocess(self, inputs):
@@ -53,17 +54,28 @@ class MobilenetPose(Model):
                     is_training=self._is_training)
             ):
                 n_skips = len(self._skip_layers)
-                fpn_layers = ['fpn_'+str(i) for i in range(n_skips)]
+                fpn_layers = {}
                 last_layer = self._skip_layers[-1]
                 net = image_features[last_layer]
-                for skip_layer, fpn_layer in zip(
-                        self._skip_layers[::-1], fpn_layers[::-1]):
+                for i in range(n_skips - 2, 0, -1):
+                    fpn_name = 'InvertedResidual_fpn_' + str(i + 1)
                     net = mobilenet.inverted_residual_bottleneck(
                         net,
                         depth=self._fpn_depth,
                         stride=1,
                         expand_ratio=6,
-                        scope=fpn_layer)
+                        scope=fpn_name)
+                    fpn_layers[fpn_name] = net
                     net = ops.nearest_neighbor_upsampling(net, 2)
+                    skip_layer = self._skip_layers[i]
                     net = tf.concat([net, image_features[skip_layer]], -1)
-                # TODO : build the final mask head
+                net = mobilenet.inverted_residual_bottleneck(
+                    net,
+                    depth=64,
+                    stride=1,
+                    expand_ratio=6,
+                    scope='InvertedResidual_final')
+                net = slim.conv2d(net, self._num_keypoints, [1, 1],
+                                  activation_fn=None,
+                                  scope='heatmap')
+        return net
