@@ -1,10 +1,12 @@
 from collections import defaultdict
 import numpy as np
 from tqdm import tqdm
-from pose_data import Pose
+from pose_data import PoseData
+import os
+from PIL import Image
 
 
-class PoseTrack(Pose):
+class PoseTrack(PoseData):
     def __init__(self, image_dir, annotation_files=None):
         super().__init__(image_dir, annotation_files)
 

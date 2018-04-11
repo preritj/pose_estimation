@@ -9,7 +9,7 @@ from pycocotools import mask as maskUtils
 import cv2
 
 
-class Pose:
+class PoseData:
     def __init__(self, image_dir, annotation_files=None):
         """
         Constructor of Pose class for reading and visualizing annotations

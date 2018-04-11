@@ -1,9 +1,9 @@
 from collections import defaultdict
 import numpy as np
-from pose_data import Pose
+from pose_data import PoseData
 
 
-class MPII(Pose):
+class MPII(PoseData):
     def __init__(self, image_dir, annotation_files=None):
         super().__init__(image_dir, annotation_files)
 
