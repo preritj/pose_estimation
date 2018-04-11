@@ -116,7 +116,7 @@ class PoseData:
         m = maskUtils.decode(rle)
         return m
 
-    def get_heatmap(self, img_id):
+    def get_heatmap(self, img_id, shape=None):
         anns = self.anns[img_id]
         h, w = self.imgs[img_id]['shape']
         heatmaps = np.zeros((h, w, self.num_keypoints))
@@ -127,6 +127,10 @@ class PoseData:
                     continue
                 heatmap = self._generate_heatmap(kp[:2], self.sigma, [h, w])
                 heatmaps[:, :, i] = np.maximum(heatmaps[:, :, i], heatmap)
+        if shape is not None:
+            map_h, map_w = shape
+            heatmaps = cv2.resize(heatmaps, (map_w, map_h),
+                                  interpolation=cv2.INTER_AREA)
         return heatmaps
 
     @staticmethod
