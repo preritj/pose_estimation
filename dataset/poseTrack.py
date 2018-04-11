@@ -19,8 +19,7 @@ class PoseTrack(PoseData):
             width, height = im.size
             img_id = self.dataset_count*10000 + annotations['imgnum'][0]
             self.imgs[img_id] = {'file_name': img_name,
-                                 'height': height,
-                                 'width': width}
+                                 'shape': [height, width]}
             if not annotations['is_labeled']:
                 continue
             persons = annotations['annorect']

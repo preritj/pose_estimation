@@ -39,6 +39,7 @@ class PoseData:
         self.skeleton = [[0, 1], [1, 2], [2, 3], [2, 4], [2, 9], [2, 10], [3, 5],
                          [4, 6], [5, 7], [6, 8], [9, 11], [10, 12], [11, 13], [12, 14]]
         self.imgs, self.ids, self.anns, self.masks = None, None, None, None
+        self.sigma = 5.
         if annotation_files is not None:
             print('loading annotations into memory...')
             tic = time.time()
@@ -84,8 +85,7 @@ class PoseData:
         Convert annotation which can be polygons, uncompressed RLE to RLE.
         :return: a list of rles
         """
-        t = self.imgs[img_id]
-        h, w = t['height'], t['width']
+        h, w = self.imgs[img_id]['shape']
         seg_masks = self.masks[img_id]
         rle_list = []
         for seg_mask in seg_masks:
@@ -115,3 +115,31 @@ class PoseData:
         rle = maskUtils.merge(rles)
         m = maskUtils.decode(rle)
         return m
+
+    def get_heatmap(self, img_id):
+        anns = self.anns[img_id]
+        h, w = self.imgs[img_id]['shape']
+        heatmaps = np.zeros((h, w, self.num_keypoints))
+        for ann in anns:
+            keypoints = ann['keypoints']
+            for i, kp in enumerate(keypoints):
+                if kp[2] < 1:
+                    continue
+                heatmap = self._generate_heatmap(kp[:2], self.sigma, [h, w])
+                heatmaps[:, :, i] = np.maximum(heatmaps[:, :, i], heatmap)
+        return heatmaps
+
+    @staticmethod
+    def _generate_heatmap(center, sigma, shape):
+        heatmap = np.zeros(shape)
+        roi_min = np.maximum(np.array(center) - 2 * sigma, 0).astype(np.int)
+        roi_max = np.minimum(np.array(center) + 2 * sigma, list(shape)).astype(np.int)
+        x = np.arange(roi_min[0], roi_max[0])
+        y = np.arange(roi_min[1], roi_max[1])
+        x, y = np.meshgrid(x, y)
+        d = (x - center[0]) ** 2 + (y - center[1]) ** 2
+        heatmap[y, x] = np.exp(- d / sigma / sigma)
+        return heatmap
+
+
+

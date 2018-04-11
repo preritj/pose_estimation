@@ -12,8 +12,7 @@ class COCO(PoseData):
         self.dataset_count += 1
         for img in dataset['images']:
             self.imgs[img['id']] = {'file_name': img['file_name'],
-                                    'height': img['height'],
-                                    'width': img['width']}
+                                    'shape': [img['height'], img['width']]}
 
         kp_names = dataset['categories'][0]['keypoints']
 
@@ -22,9 +21,9 @@ class COCO(PoseData):
                 continue
             area = ann['area']
             img = self.imgs[ann['image_id']]
-            img_area = img['height'] * img['width']
+            img_area = np.product(img['shape'])
             num_keypoints = ann['num_keypoints']
-            if ann['iscrowd'] or (area > .25 * img_area) or (num_keypoints < 2):
+            if ann['iscrowd'] or (area > .3 * img_area) or (num_keypoints < 2):
                 ignore_region = ann['segmentation']
                 self.masks[ann['image_id']].append(
                     {'ignore_region': ignore_region})
