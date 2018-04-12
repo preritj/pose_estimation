@@ -7,7 +7,7 @@ from mpii import MPII
 from poseTrack import PoseTrack
 
 
-def get_dataflow(datasets, batch_size, out_shape, nr_thread=None):
+def get_dataflow(datasets, batch_size, out_shape=None, nr_thread=None):
     """Takes as input dictionary of datasets"""
     df_lists = []
     for name, data in datasets:
