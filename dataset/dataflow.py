@@ -7,8 +7,14 @@ from mpii import MPII
 from poseTrack import PoseTrack
 
 
-def get_dataflow(datasets, batch_size, out_shape=None, nr_thread=None):
-    """Takes as input dictionary of datasets"""
+def get_data(datasets, batch_size, out_shape=None, nr_thread=None):
+    """Data generator
+    Args:
+      datasets (dictionary) : datasets with path info
+      batch_size (int) : batch size
+      out_shape (tensor): shape of output heatmap tensor
+      nr_thread (int): number of threads
+      """
     df_lists = []
     for name, data in datasets:
         if name == 'coco':
