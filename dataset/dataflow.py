@@ -5,7 +5,7 @@ from poseTrack import PoseTrack
 from pose_data import PoseMetadata
 
 
-class PoseDataFlow(RandomChooseData):
+class PoseDataFlow:
     def __init__(self, datasets):
         """Takes as input dictionary of datasets"""
         df_lists = []
@@ -22,7 +22,11 @@ class PoseDataFlow(RandomChooseData):
             else:
                 raise RuntimeError('Dataset not supported')
 
-        super().__init__(df_lists)
+        if len(df_lists) == 1:
+            df = df_lists[0]
+        else:
+            df = RandomChooseData(df_lists)
+            
 
 
 
