@@ -12,7 +12,6 @@ class Model:
         self._input_shape = (360, 360)
         self._output_shape = self.get_output_shape()
         self.tf_placeholders = self.create_placeholders()
-        pass
 
     @abstractmethod
     def get_output_shape(self):
@@ -41,5 +40,10 @@ class Model:
         """Builds network and returns heatmap logits"""
         pass
 
+    def make_train_op(self):
+        images = self.tf_placeholders['images']
+        images = self.preprocess(images)
+        heatmap_logits = self.build_net(images)
 
+        pass
 
