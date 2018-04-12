@@ -11,14 +11,14 @@ class PoseTrack(PoseData):
         super().__init__(image_dir, annotation_files)
 
     def _build_dataset(self, dataset, kp_dict):
-        self.dataset_count += 1
         for annotations in dataset['annolist']:
             img_name = annotations['image'][0]['name']
+            img_name = img_name.split('images/')[0]
             img_path = os.path.join(self.image_dir, img_name)
             im = Image.open(img_path)
             width, height = im.size
-            img_id = self.dataset_count*10000 + annotations['imgnum'][0]
-            self.imgs[img_id] = {'file_name': img_name,
+            img_id = annotations['imgnum'][0]
+            self.imgs[img_id] = {'filename': img_name,
                                  'shape': [height, width]}
             if not annotations['is_labeled']:
                 continue

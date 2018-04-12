@@ -7,16 +7,17 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from pycocotools import mask as maskUtils
 import cv2
-from tensorpack import RNGDataFlow
+from tqdm import tqdm
 
 
-class PoseData(RNGDataFlow):
+class PoseData(object):
     def __init__(self, image_dir, annotation_files=None):
         """
         Constructor of Pose class for reading and visualizing annotations
          from human pose datasets.
-        :param annotation_files (str): list of annotation files
+        :param annotation_files (str or list): list of annotation files
         :param image_dir (str): location of image directory
+        :param save_ann_dir (str): location where indexed annotations are saved
         :return:
         """
         self.image_dir = image_dir
@@ -41,7 +42,7 @@ class PoseData(RNGDataFlow):
         self.skeleton = [[0, 1], [1, 2], [2, 3], [2, 4], [2, 9], [2, 10], [3, 5],
                          [4, 6], [5, 7], [6, 8], [9, 11], [10, 12], [11, 13], [12, 14]]
         self.imgs, self.ids, self.anns, self.masks = None, None, None, None
-        self.sigma = 5.
+        self.sigma = 10.
         if annotation_files is not None:
             print('loading annotations into memory...')
             tic = time.time()
@@ -60,55 +61,44 @@ class PoseData(RNGDataFlow):
     def create_index(self):
         return
 
-    def size(self):
-        return len(self.ids)
+    def save_annotations(self, save_ann_dir):
+        save_anns = False
+        if not os.path.exists(save_ann_dir):
+            print("Annotations will be saved to ", save_ann_dir)
+            save_anns = True
+            os.makedirs(save_ann_dir)
+        else:
+            print("Annotations directory already exists")
+        meta = []
+        print("Building metadata for training...")
+        for img_id in tqdm(self.ids):
+            img_meta = self.imgs[img_id]
+            img_file = img_meta['filename']
+            img_file = os.path.join(self.image_dir, img_file)
+            ann_file = img_meta['filename'].split('.')[0]+'.npy'
+            ann_file = os.path.join(save_ann_dir, ann_file)
+            if save_anns:
+                base_dir = os.path.dirname(ann_file)
+                if not os.path.exists(base_dir):
+                    os.makedirs(base_dir)
+                poses = self.anns[img_id]
+                masks = self.masks[img_id]
+                ann = {'poses': poses, 'masks': masks}
+                np.save(ann_file, ann)
+            meta.append((img_file, ann_file))
+        return meta
 
-    def get_data(self):
-        idxs = np.arange(self.size())
-        self.rng.shuffle(idxs)
-        for idx in idxs:
-            img_id = self.ids[idx]
-            meta = PoseMetadata(img_dir=self.image_dir,
-                                img_meta=self.imgs[img_id],
-                                annotations=self.anns[img_id],
-                                masks=self.masks[img_id],
-                                sigma=self.sigma,
-                                num_keypoints=self.num_keypoints)
-            yield meta
-
-    def display_anns(self, img_id, show_mask=False):
-        filename = self.imgs[img_id]['file_name']
-        img_file = os.path.join(self.image_dir, filename)
-        img = plt.imread(img_file)
-        if show_mask:
-            mask_img = np.zeros_like(img)
-            mask = self.get_mask(img_id)
-            if mask is not None:
-                mask_img[:, :, 0] = 255. * mask
-                img = cv2.addWeighted(img, 1., mask_img, 0.5, 0)
-        plt.imshow(img)
-        sks = np.array(self.skeleton)
-        colors = cm.jet(np.linspace(0, 1, self.num_keypoints))
-        np.random.seed(1999)
-        np.random.shuffle(colors)
-        for ann in self.anns[img_id]:
-            kp = ann['keypoints']
-            x, y, v = kp[:, 0], kp[:, 1], kp[:, 2]
-            for c, sk in zip(colors, sks):
-                if np.all(v[sk] > 0):
-                    plt.plot(x[sk], y[sk], linewidth=3, color=c)
-
-
-class PoseMetadata:
-    def __init__(self, img_dir, img_meta, annotations, masks,
-                 sigma=8., num_keypoints=15):
-        self.img_path = os.path.join(img_dir, img_meta['file_name'])
-        self.image = None
-        self._img_shape = img_meta['shape']
-        self._anns = annotations
-        self._sigma = sigma
-        self._masks = masks
-        self._num_keypoints = num_keypoints
+    def load_annotations(self, ann_dir, ext='.jpg'):
+        meta = []
+        for root, dirs, files in os.walk(ann_dir):
+            for file in files:
+                if file.endswith(".npy"):
+                    ann_file = os.path.join(root, file)
+                    rel_path = os.path.relpath(root, ann_dir)
+                    img_file = file.split('.')[0] + ext
+                    img_file = os.path.join(self.image_dir, rel_path, img_file)
+                    meta.append((img_file, ann_file))
+        return meta
 
     @staticmethod
     def _generate_heatmap(center, sigma, shape):
@@ -147,15 +137,15 @@ class PoseMetadata:
             rle_list.append(rle)
         return rle_list
 
-    def get_heatmap(self, out_shape=None):
-        h, w = self._img_shape
-        heatmaps = np.zeros((h, w, self._num_keypoints))
-        for ann in self._anns:
+    def get_heatmap(self, img_id, out_shape=None):
+        h, w = self.imgs[img_id]['shape']
+        heatmaps = np.zeros((h, w, self.num_keypoints))
+        for ann in self.anns[img_id]:
             keypoints = ann['keypoints']
             for i, kp in enumerate(keypoints):
                 if kp[2] < 1:
                     continue
-                heatmap = self._generate_heatmap(kp[:2], self._sigma, [h, w])
+                heatmap = self._generate_heatmap(kp[:2], self.sigma, [h, w])
                 heatmaps[:, :, i] = np.maximum(heatmaps[:, :, i], heatmap)
         if out_shape is not None:
             map_h, map_w = out_shape
@@ -163,17 +153,38 @@ class PoseMetadata:
                                   interpolation=cv2.INTER_AREA)
         return heatmaps
 
-    def get_mask(self):
+    def get_mask(self, img_id):
         """
         Convert annotation which can be polygons, uncompressed RLE, or RLE to binary mask.
         :return: binary mask (numpy 2D array)
         """
-        rles = self.get_mask_rles(self._img_shape, self._masks)
+        img_shape = self.imgs[img_id]['shape']
+        rles = self.get_mask_rles(img_shape, self.masks[img_id])
         if len(rles) == 0:
             return None
         rle = maskUtils.merge(rles)
         m = maskUtils.decode(rle)
         return m
 
-
+    def display_anns(self, img_id, show_mask=False):
+        filename = self.imgs[img_id]['file_name']
+        img_file = os.path.join(self.image_dir, filename)
+        img = plt.imread(img_file)
+        if show_mask:
+            mask_img = np.zeros_like(img)
+            mask = self.get_mask(img_id)
+            if mask is not None:
+                mask_img[:, :, 0] = 255. * mask
+                img = cv2.addWeighted(img, 1., mask_img, 0.5, 0)
+        plt.imshow(img)
+        sks = np.array(self.skeleton)
+        colors = cm.jet(np.linspace(0, 1, self.num_keypoints))
+        np.random.seed(1999)
+        np.random.shuffle(colors)
+        for ann in self.anns[img_id]:
+            kp = ann['keypoints']
+            x, y, v = kp[:, 0], kp[:, 1], kp[:, 2]
+            for c, sk in zip(colors, sks):
+                if np.all(v[sk] > 0):
+                    plt.plot(x[sk], y[sk], linewidth=3, color=c)
 

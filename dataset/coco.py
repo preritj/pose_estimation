@@ -9,9 +9,8 @@ class COCO(PoseData):
         super().__init__(image_dir, annotation_files)
 
     def _build_dataset(self, dataset):
-        self.dataset_count += 1
         for img in dataset['images']:
-            self.imgs[img['id']] = {'file_name': img['file_name'],
+            self.imgs[img['id']] = {'filename': img['file_name'],
                                     'shape': [img['height'], img['width']]}
 
         kp_names = dataset['categories'][0]['keypoints']

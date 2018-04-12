@@ -8,17 +8,14 @@ class MPII(PoseData):
         super().__init__(image_dir, annotation_files)
 
     def _build_dataset(self, dataset, kp_dict):
-        self.dataset_count += 1
         dataset = dataset['RELEASE'][0]
         is_train_list = dataset['img_train']
 
         for i, (is_train, annotations) in enumerate(
                 zip(is_train_list, dataset['annolist'])):
             img_name = annotations['image'][0]['name']
-            img_id = self.dataset_count*50000 + i
-            self.imgs[i] = {'file_name': img_name,
-                            'height': None,
-                            'width': None}
+            self.imgs[i] = {'filename': img_name,
+                            'shape': None}
             if not is_train:
                 continue
             persons = annotations['annorect']
