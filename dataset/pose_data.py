@@ -74,7 +74,7 @@ class PoseData(RNGDataFlow):
                                 masks=self.masks[img_id],
                                 sigma=self.sigma,
                                 num_keypoints=self.num_keypoints)
-            yield [meta]
+            yield meta
 
     def display_anns(self, img_id, show_mask=False):
         filename = self.imgs[img_id]['file_name']
@@ -103,6 +103,7 @@ class PoseMetadata:
     def __init__(self, img_dir, img_meta, annotations, masks,
                  sigma=8., num_keypoints=15):
         self.img_path = os.path.join(img_dir, img_meta['file_name'])
+        self.image = None
         self._img_shape = img_meta['shape']
         self._anns = annotations
         self._sigma = sigma
