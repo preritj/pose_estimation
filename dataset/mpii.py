@@ -5,6 +5,7 @@ from pose_data import PoseData
 
 class MPII(PoseData):
     def __init__(self, image_dir, annotation_files=None):
+        self.idx_count = 0
         super().__init__(image_dir, annotation_files)
 
     def _build_dataset(self, dataset, kp_dict):
@@ -13,9 +14,11 @@ class MPII(PoseData):
 
         for i, (is_train, annotations) in enumerate(
                 zip(is_train_list, dataset['annolist'])):
+            img_id = i + self.idx_count
+            self.idx_count += 1
             img_name = annotations['image'][0]['name']
-            self.imgs[i] = {'filename': img_name,
-                            'shape': None}
+            self.imgs[img_id] = {'filename': img_name,
+                            'shape': [0, 0]}
             if not is_train:
                 continue
             persons = annotations['annorect']
@@ -39,7 +42,7 @@ class MPII(PoseData):
                 # hack for nose in MPII
                 if keypoints_clean[0, 2] > 0 and keypoints_clean[2, 2] > 0:
                     keypoints_clean[1] = np.mean(keypoints_clean[[0, 2], :], axis=0)
-                self.anns[i].append({'keypoints': keypoints_clean})
+                self.anns[img_id].append({'keypoints': keypoints_clean})
 
     def create_index(self):
         kp_dict = {0: 'right_ankle',

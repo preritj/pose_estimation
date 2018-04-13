@@ -2,12 +2,16 @@ import time
 import json
 import numpy as np
 import os
+import io
 from abc import abstractmethod
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from pycocotools import mask as maskUtils
 import cv2
+import PIL.Image
 from tqdm import tqdm
+from utils import dataset_util
+import tensorflow as tf
 
 
 class PoseData(object):
@@ -61,32 +65,43 @@ class PoseData(object):
     def create_index(self):
         return
 
-    def save_annotations(self, save_ann_dir):
-        save_anns = False
-        if not os.path.exists(save_ann_dir):
-            print("Annotations will be saved to ", save_ann_dir)
-            save_anns = True
-            os.makedirs(save_ann_dir)
-        else:
-            print("Annotations directory already exists")
-        meta = []
-        print("Building metadata for training...")
+    def _create_tf_example(self, img_id):
+        img_meta = self.imgs[img_id]
+        img_file = img_meta['filename']
+        img_file = os.path.join(self.image_dir, img_file)
+        img_shape = list(img_meta['shape'])
+        bboxes_bytes = []
+        keypoints_bytes = []
+        for ann in self.anns[img_id]:
+            bboxes_bytes.append(np.array(ann['bbox'].tostring()))
+            keypoints_bytes.append(ann['keypoints'].tostring())
+        mask = self.get_mask(img_id)
+        mask_bytes = PIL.Image.fromarray(mask)
+        output_io = io.BytesIO()
+        mask_bytes.save(output_io, format='PNG')
+
+        feature_dict = {
+            'image/filename':
+                dataset_util.bytes_feature(img_file.encode('utf8')),
+            'image/shape':
+                dataset_util.int64_list_feature(img_shape),
+            'image/person/bbox':
+                dataset_util.bytes_list_feature(bboxes_bytes),
+            'image/person/keypoints':
+                dataset_util.bytes_list_feature(keypoints_bytes),
+            'image/person/mask':
+                dataset_util.bytes_feature(mask_bytes)}
+        return tf.train.Example(features=tf.train.Features(feature=feature_dict))
+
+    def create_tf_record(self, out_path, shuffle=True):
+        print("Creating tf records : ", out_path)
+        writer = tf.python_io.TFRecordWriter(out_path)
+        if shuffle:
+            np.random.shuffle(self.ids)
         for img_id in tqdm(self.ids):
-            img_meta = self.imgs[img_id]
-            img_file = img_meta['filename']
-            img_file = os.path.join(self.image_dir, img_file)
-            ann_file = img_meta['filename'].split('.')[0]+'.npy'
-            ann_file = os.path.join(save_ann_dir, ann_file)
-            if save_anns:
-                base_dir = os.path.dirname(ann_file)
-                if not os.path.exists(base_dir):
-                    os.makedirs(base_dir)
-                poses = self.anns[img_id]
-                masks = self.masks[img_id]
-                ann = {'poses': poses, 'masks': masks}
-                np.save(ann_file, ann)
-            meta.append((img_file, ann_file))
-        return meta
+            tf_example = self._create_tf_example(img_id)
+            writer.write(tf_example.SerializeToString())
+        writer.close()
 
     def load_annotations(self, ann_dir, ext='.jpg'):
         meta = []

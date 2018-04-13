@@ -8,16 +8,20 @@ from PIL import Image
 
 class PoseTrack(PoseData):
     def __init__(self, image_dir, annotation_files=None):
+        self.idx_count = 0
+        self.idx_map = {}
         super().__init__(image_dir, annotation_files)
 
     def _build_dataset(self, dataset, kp_dict):
-        for annotations in dataset['annolist']:
+        for i, annotations in enumerate(dataset['annolist']):
             img_name = annotations['image'][0]['name']
             img_name = img_name.split('images/')[0]
             img_path = os.path.join(self.image_dir, img_name)
             im = Image.open(img_path)
             width, height = im.size
-            img_id = annotations['imgnum'][0]
+            img_id = i + self.idx_count
+            self.idx_count += 1
+            self.idx_map[img_id] = annotations['imgnum'][0]
             self.imgs[img_id] = {'filename': img_name,
                                  'shape': [height, width]}
             if not annotations['is_labeled']:
