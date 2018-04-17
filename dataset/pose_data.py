@@ -70,21 +70,25 @@ class PoseData(object):
         img_file = img_meta['filename']
         img_file = os.path.join(self.image_dir, img_file)
         img_shape = list(img_meta['shape'])
-        bboxes_bytes = []
-        keypoints_bytes = []
+        bboxes = []
+        keypoints = []
         for ann in self.anns[img_id]:
-            bboxes_bytes.append(np.array(ann['bbox']).tostring())
-            keypoints_bytes.append(ann['keypoints'])
+            bboxes.append(ann['bbox'])
+            keypoints.append(ann['keypoints'])
         mask = self.get_mask(img_id)
-        if mask is None:
-            mask = np.zeros(img_shape, dtype=np.uint8)
-        n_instances = len(keypoints_bytes)
-        keypoints_bytes = np.array(keypoints_bytes).flatten().tolist()
+        # if mask is None:
+        #    mask = np.zeros(img_shape, dtype=np.uint8)
+        n_instances = len(keypoints)
+        keypoints_bytes = np.array(keypoints).flatten().tolist()
+        bboxes = np.array(bboxes).flatten().tolist()
 
-        img = PIL.Image.fromarray(mask)
-        output_io = io.BytesIO()
-        img.save(output_io, format='PNG')
-        mask_bytes = output_io.getvalue()
+        mask_x, mask_y = [], []
+        if mask is not None:
+            mask_x, mask_y = np.where(mask > 0)
+        # img = PIL.Image.fromarray(mask)
+        # output_io = io.BytesIO()
+        # img.save(output_io, format='PNG')
+        # mask_bytes = output_io.getvalue()
 
         feature_dict = {
             'image/filename':
@@ -94,11 +98,14 @@ class PoseData(object):
             'image/num_instances':
                 dataset_util.int64_feature(n_instances),
             'image/person/bbox':
-                dataset_util.bytes_list_feature(bboxes_bytes),
+                dataset_util.float_list_feature(bboxes),
             'image/person/keypoints':
                 dataset_util.float_list_feature(keypoints_bytes),
-            'image/mask':
-                dataset_util.bytes_feature(mask_bytes)}
+            'image/mask/x':
+                dataset_util.int64_list_feature(mask_x),
+            'image/mask/y':
+                dataset_util.int64_list_feature(mask_y)
+        }
         return tf.train.Example(features=tf.train.Features(feature=feature_dict))
 
     def create_tf_record(self, out_path, shuffle=True):
