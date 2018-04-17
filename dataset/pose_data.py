@@ -73,23 +73,31 @@ class PoseData(object):
         bboxes_bytes = []
         keypoints_bytes = []
         for ann in self.anns[img_id]:
-            bboxes_bytes.append(np.array(ann['bbox'].tostring()))
-            keypoints_bytes.append(ann['keypoints'].tostring())
+            bboxes_bytes.append(np.array(ann['bbox']).tostring())
+            keypoints_bytes.append(ann['keypoints'])
         mask = self.get_mask(img_id)
-        mask_bytes = PIL.Image.fromarray(mask)
+        if mask is None:
+            mask = np.zeros(img_shape, dtype=np.uint8)
+        n_instances = len(keypoints_bytes)
+        keypoints_bytes = np.array(keypoints_bytes).flatten().tolist()
+
+        img = PIL.Image.fromarray(mask)
         output_io = io.BytesIO()
-        mask_bytes.save(output_io, format='PNG')
+        img.save(output_io, format='PNG')
+        mask_bytes = output_io.getvalue()
 
         feature_dict = {
             'image/filename':
                 dataset_util.bytes_feature(img_file.encode('utf8')),
             'image/shape':
                 dataset_util.int64_list_feature(img_shape),
+            'image/num_instances':
+                dataset_util.int64_feature(n_instances),
             'image/person/bbox':
                 dataset_util.bytes_list_feature(bboxes_bytes),
             'image/person/keypoints':
-                dataset_util.bytes_list_feature(keypoints_bytes),
-            'image/person/mask':
+                dataset_util.float_list_feature(keypoints_bytes),
+            'image/mask':
                 dataset_util.bytes_feature(mask_bytes)}
         return tf.train.Example(features=tf.train.Features(feature=feature_dict))
 
