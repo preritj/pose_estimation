@@ -116,34 +116,33 @@ class PoseDataReader(object):
         probs = np.array(probs)
         return probs / np.sum(probs)
 
-    def read_data(self, config):
+    def read_data(self, train_config):
         probs = self._get_probs()
         probs = tf.cast(probs, tf.float32)
         decoder = _decoder()
         filenames = [ds['tfrecord_path'] for ds in self.datasets]
-        file_ids = tf.constant(list(range(len(filenames))))
-        filenames = tf.constant(filenames)
-        dataset = tf.data.Dataset.from_tensor_slices((filenames, file_ids))
-        # dataset = dataset.apply(tf.contrib.data.rejection_resample(
-        #     class_func=lambda _, c: c,
-        #     target_dist=probs,
-        #     seed=42))
-        dataset = dataset.map(lambda a, _: a)
-        if config.shuffle:
+        file_ids = list(range(len(filenames)))
+        dataset = tf.data.Dataset.from_tensor_slices((file_ids, filenames))
+        dataset = dataset.apply(tf.contrib.data.rejection_resample(
+            class_func=lambda c, _: c,
+            target_dist=probs,
+            seed=42))
+        dataset = dataset.map(lambda _, a: a[1])
+        if train_config.shuffle:
             dataset = dataset.shuffle(
-                config.filenames_shuffle_buffer_size)
+                train_config.filenames_shuffle_buffer_size)
 
-        dataset = dataset.repeat(config.num_epochs or None)
+        dataset = dataset.repeat(train_config.num_epochs or None)
 
         file_read_func = functools.partial(tf.data.TFRecordDataset,
                                            buffer_size=8 * 1000 * 1000)
         records_dataset = dataset.apply(
             tf.contrib.data.parallel_interleave(
-                file_read_func, cycle_length=config.num_readers,
-                block_length=config.read_block_length, sloppy=True))
-        if config.shuffle:
-            records_dataset.shuffle(config.shuffle_buffer_size)
+                file_read_func, cycle_length=train_config.num_readers,
+                block_length=train_config.read_block_length, sloppy=True))
+        if train_config.shuffle:
+            records_dataset.shuffle(train_config.shuffle_buffer_size)
         # records_dataset = records_dataset.batch(config.batch_size)
         tensor_dataset = records_dataset.map(
-            decoder.decode, num_parallel_calls=config.num_parallel_map_calls)
-        return tensor_dataset.prefetch(config.prefetch_size)
+            decoder.decode, num_parallel_calls=train_config.num_parallel_map_calls)
+        return tensor_dataset.prefetch(train_config.prefetch_size)
