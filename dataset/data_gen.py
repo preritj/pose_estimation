@@ -5,6 +5,7 @@ from mpii import MPII
 from poseTrack import PoseTrack
 import tensorflow as tf
 import functools
+from utils.dataset_util import normalize_bboxes, normalize_keypoints
 
 slim_example_decoder = tf.contrib.slim.tfexample_decoder
 
@@ -74,6 +75,7 @@ class PoseDataReader(object):
     @staticmethod
     def _keypoints_decoder(keys_to_tensor, num_keypoints=15):
         keypoints = keys_to_tensor['image/person/keypoints']
+        img_shape = keys_to_tensor['image/shape']
         num_instances = PoseDataReader._get_tensor(
             keys_to_tensor['image/num_instances'])
         shape = [num_instances] + [num_keypoints, 3]
@@ -82,11 +84,13 @@ class PoseDataReader(object):
             keypoints = tf.sparse_tensor_to_dense(keypoints)
         else:
             keypoints = tf.reshape(keypoints, shape=shape)
+        keypoints = normalize_keypoints(keypoints, img_shape)
         return keypoints
 
     @staticmethod
     def _bbox_decoder(keys_to_tensor):
         bbox = keys_to_tensor['image/person/bbox']
+        img_shape = keys_to_tensor['image/shape']
         num_instances = PoseDataReader._get_tensor(
             keys_to_tensor['image/num_instances'])
         shape = [num_instances] + [4]
@@ -95,6 +99,7 @@ class PoseDataReader(object):
             bbox = tf.sparse_tensor_to_dense(bbox)
         else:
             bbox = tf.reshape(bbox, shape=shape)
+        bbox = normalize_bboxes(bbox, img_shape)
         return bbox
 
     def _decoder(self):
@@ -123,11 +128,11 @@ class PoseDataReader(object):
                 ['image/mask/x', 'image/mask/y', 'image/shape'],
                 self._mask_decoder),
             'keypoints': slim_example_decoder.ItemHandlerCallback(
-                ['image/person/keypoints', 'image/num_instances'],
-                keypoints_decoder),
+                ['image/person/keypoints', 'image/num_instances',
+                 'image/shape'], keypoints_decoder),
             'bbox': slim_example_decoder.ItemHandlerCallback(
-                ['image/person/bbox', 'image/num_instances'],
-                self._bbox_decoder)
+                ['image/person/bbox', 'image/num_instances',
+                 'image/shape'], self._bbox_decoder)
         }
         decoder = slim_example_decoder.TFExampleDecoder(keys_to_features,
                                                         items_to_handlers)

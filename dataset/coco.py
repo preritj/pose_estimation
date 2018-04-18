@@ -28,7 +28,8 @@ class COCO(PoseData):
                 self.masks[ann['image_id']].append(
                     {'ignore_region': ignore_region})
                 continue
-            bbox = ann['bbox']
+            xmin, ymin, w, h = ann['bbox']
+            bbox = [ymin, xmin, h, w]
             kp = np.array(ann['keypoints'])
             xs = kp[0::3]
             ys = kp[1::3]

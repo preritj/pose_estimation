@@ -2,15 +2,13 @@ import time
 import json
 import numpy as np
 import os
-import io
 from abc import abstractmethod
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from pycocotools import mask as maskUtils
 import cv2
-import PIL.Image
 from tqdm import tqdm
-from utils import dataset_util
+from utils import tfrecord_util
 import tensorflow as tf
 
 
@@ -92,19 +90,19 @@ class PoseData(object):
 
         feature_dict = {
             'image/filename':
-                dataset_util.bytes_feature(img_file.encode('utf8')),
+                tfrecord_util.bytes_feature(img_file.encode('utf8')),
             'image/shape':
-                dataset_util.int64_list_feature(img_shape),
+                tfrecord_util.int64_list_feature(img_shape),
             'image/num_instances':
-                dataset_util.int64_feature(n_instances),
+                tfrecord_util.int64_feature(n_instances),
             'image/person/bbox':
-                dataset_util.float_list_feature(bboxes),
+                tfrecord_util.float_list_feature(bboxes),
             'image/person/keypoints':
-                dataset_util.float_list_feature(keypoints_bytes),
+                tfrecord_util.float_list_feature(keypoints_bytes),
             'image/mask/x':
-                dataset_util.int64_list_feature(mask_x),
+                tfrecord_util.int64_list_feature(mask_x),
             'image/mask/y':
-                dataset_util.int64_list_feature(mask_y)
+                tfrecord_util.int64_list_feature(mask_y)
         }
         return tf.train.Example(features=tf.train.Features(feature=feature_dict))
 
