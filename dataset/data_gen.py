@@ -5,7 +5,9 @@ from mpii import MPII
 from poseTrack import PoseTrack
 import tensorflow as tf
 import functools
-from utils.dataset_util import normalize_bboxes, normalize_keypoints
+from utils.dataset_util import (
+    normalize_bboxes, normalize_keypoints,
+    random_flip_left_right, random_crop)
 
 slim_example_decoder = tf.contrib.slim.tfexample_decoder
 
@@ -70,6 +72,7 @@ class PoseDataReader(object):
         mask = tf.SparseTensor(indices=indices, values=values,
                                dense_shape=shape)
         mask = tf.sparse_tensor_to_dense(mask, default_value=0)
+        mask = 1 - mask
         return mask
 
     @staticmethod
@@ -169,4 +172,14 @@ class PoseDataReader(object):
             decoder.decode, items=['image', 'keypoints', 'bbox', 'mask'])
         tensor_dataset = records_dataset.map(
             decode_fn, num_parallel_calls=train_config.num_parallel_map_calls)
+        tensor_dataset = tensor_dataset.map(
+            random_flip_left_right,
+            num_parallel_calls=train_config.num_parallel_map_calls
+        )
+        tensor_dataset.prefetch(train_config.prefetch_size)
+        random_crop_fn = functools.partial(random_crop, crop_size=(360, 360))
+        tensor_dataset = tensor_dataset.map(
+            random_crop_fn,
+            num_parallel_calls=train_config.num_parallel_map_calls
+        )
         return tensor_dataset.prefetch(train_config.prefetch_size)

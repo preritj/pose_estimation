@@ -29,7 +29,7 @@ class COCO(PoseData):
                     {'ignore_region': ignore_region})
                 continue
             xmin, ymin, w, h = ann['bbox']
-            bbox = [ymin, xmin, h, w]
+            bbox = [ymin, xmin, ymin + h, xmin + w]
             kp = np.array(ann['keypoints'])
             xs = kp[0::3]
             ys = kp[1::3]
