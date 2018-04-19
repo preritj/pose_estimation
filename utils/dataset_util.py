@@ -131,11 +131,10 @@ def random_crop(image, keypoints, bboxes, mask, crop_size=None):
 
     bbox_min, bbox_max = tf.split(new_bboxes, num_or_size_splits=[2, 2],
                                   axis=1)
-    bbox_min = tf.to_int32(tf.round(bbox_min * img_shape[:2]))
-    bbox_max = tf.to_int32(tf.round(bbox_max * img_shape[:2]))
     bbox_min = tf.reduce_min(bbox_min, 0)
     bbox_max = tf.reduce_max(bbox_max, 0)
-    print(bbox_min)
+    bbox_min = tf.to_int32(tf.round(bbox_min * img_shape[:2]))
+    bbox_max = tf.to_int32(tf.round(bbox_max * img_shape[:2]))
     crop_shape = tf.stack([crop_h, crop_w])
     offset_min = tf.maximum(0, bbox_max - crop_shape)
     offset_max = tf.minimum(tf.to_int32(img_shape[:2]) - crop_shape + 1,
@@ -160,3 +159,33 @@ def random_crop(image, keypoints, bboxes, mask, crop_size=None):
     new_bboxes, new_keypoints = prune_bboxes_keypoints(
         new_bboxes, new_keypoints, crop_box)
     return new_image, new_keypoints, new_bboxes, new_mask
+
+
+def _generate_heatmap_plane(center, sigma, shape):
+    roi_min = tf.cast(tf.maximum(center - 2 * sigma, 0), tf.int32)
+    roi_max = tf.cast(tf.minimum(center + 2 * sigma, shape), tf.int32)
+    x = tf.range(roi_min[0], roi_max[0], dtype=tf.int32)
+    y = tf.range(roi_min[1], roi_max[1], dtype=tf.int32)
+    x, y = tf.meshgrid(x, y)
+    d = tf.square(x - center[0]) + tf.square(y - center[1])
+    intensity = tf.exp(- d / sigma / sigma)
+    indices = tf.stack(tf.reshape(x, [-1]), tf.reshape(y, [-1]), 1)
+    values = tf.reshape(intensity, [-1])
+    heatmap = tf.SparseTensor(indices, values, dense_shape=shape)
+    return heatmap
+
+def get_heatmap(keypoints, sigma, shape, num_keypoints):
+    keypoints_ = tf.transpose(keypoints, [1, 0, 2])
+    heatmaps = []
+    for keypoint in tf.unstack(keypoints_):
+        # create empty sparse tensor
+        heatmap_plane = tf.SparseTensor([[0, 0]], 0., shape)
+        kp_centers, visible = tf.split(
+            keypoint, num_or_size_splits=[2, 1], axis=1)
+        for center in tf.unstack(kp_centers):
+            heatmap_plane = tf.sparse_reduce_max_sparse(
+                heatmap_plane,
+                _generate_heatmap_plane(center, sigma, shape)
+            )
+        heatmaps.append(tf.sparse_tensor_to_dense(heatmap_plane))
+    return tf.stack(heatmaps)
