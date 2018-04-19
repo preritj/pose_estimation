@@ -7,7 +7,8 @@ import tensorflow as tf
 import functools
 from utils.dataset_util import (
     normalize_bboxes, normalize_keypoints,
-    random_flip_left_right, random_crop)
+    random_flip_left_right, random_crop,
+    crop_to_aspect_ratio, keypoints_to_heatmap)
 
 slim_example_decoder = tf.contrib.slim.tfexample_decoder
 
@@ -177,9 +178,21 @@ class PoseDataReader(object):
             num_parallel_calls=train_config.num_parallel_map_calls
         )
         tensor_dataset.prefetch(train_config.prefetch_size)
-        random_crop_fn = functools.partial(random_crop, crop_size=(360, 360))
         tensor_dataset = tensor_dataset.map(
-            random_crop_fn,
+            random_crop,
+            num_parallel_calls=train_config.num_parallel_map_calls
+        )
+        tensor_dataset.prefetch(train_config.prefetch_size)
+        crop_to_aspect_ratio_fn = functools.partial(
+            crop_to_aspect_ratio, aspect_ratio=1.)
+        tensor_dataset = tensor_dataset.map(
+            crop_to_aspect_ratio_fn,
+            num_parallel_calls=train_config.num_parallel_map_calls
+        )
+        tensor_dataset.prefetch(train_config.prefetch_size)
+        heatmap_fn = functools.partial(keypoints_to_heatmap, sigma=8)
+        tensor_dataset = tensor_dataset.map(
+            heatmap_fn,
             num_parallel_calls=train_config.num_parallel_map_calls
         )
         return tensor_dataset.prefetch(train_config.prefetch_size)
