@@ -7,6 +7,15 @@ batch_size: 2
 num_epochs: 0
 learning_rate: 0.001
 shuffle: true
+augmentation:
+  flip_left_right: true
+  random_crop: true
+optimizer:
+  name: adam
+  params:
+    beta1: 0.9
+    beta2: 0.999
+    epsilon: 1e-8
 filenames_shuffle_buffer_size: 100
 num_parallel_map_calls: 2
 num_readers: 32

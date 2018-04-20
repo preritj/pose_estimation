@@ -10,55 +10,49 @@ class Model:
         self.cfg = model_cfg
 
     @abstractmethod
-    def get_output_shape(self):
-        """output shape of the heatmaps"""
-        pass
-
-    def create_placeholders(self, batch_size):
-        in_h, in_w = self.cfg.input_shape
-        out_h, out_w, out_n = self.cfg.output_shape
-        images = tf.placeholder(tf.float32,
-                                shape=(batch_size, in_h, in_w, 3),
-                                name='images')
-        heatmaps = tf.placeholder(tf.float32,
-                                  shape=(batch_size, out_h, out_w, out_n),
-                                  name='heatmaps')
-        masks = tf.placeholder(tf.float32,
-                               shape=(batch_size, out_h, out_w),
-                               name='masks')
-        return {'images': images,
-                'heatmaps': heatmaps,
-                'masks': masks}
-
-    @abstractmethod
-    def preprocess(self, inputs):
+    def _preprocess(self, inputs):
         """Image preprocessing"""
         raise NotImplementedError("Not yet implemented")
 
     @abstractmethod
-    def build_net(self, preprocessed_inputs):
-        """Builds network and returns heatmap logits"""
+    def _build_net(self, preprocessed_inputs, is_training=False):
+        """Builds network and returns heatmaps"""
         raise NotImplementedError("Not yet implemented")
 
-    def make_train_op(self, train_cfg):
-        learning_rate = train_cfg.learning_rate
-        batch_size = train_cfg.batch_size
-        tf_placeholders = self.create_placeholders(batch_size)
+    def predict(self, inputs, is_training=False):
+        images = inputs['images']
+        preprocessed_inputs = self._preprocess(images)
+        heatmaps = self._build_net(preprocessed_inputs,
+                                   is_training=is_training)
+        prediction = {'heatmaps': heatmaps}
+        return prediction
 
-        images = tf_placeholders['images']
-        heatmaps = tf_placeholders['heatmaps']
-        masks = tf_placeholders['masks']
-
-        images = self.preprocess(images)
-        heatmaps_pred = self.build_net(images)
+    @staticmethod
+    def losses(prediction, ground_truth):
+        heatmaps_pred = prediction['heatmaps']
+        heatmaps_gt = ground_truth['heatmaps']
+        weights = ground_truth['masks']
         l2_loss = tf.losses.mean_squared_error(
-            heatmaps, heatmaps_pred, weights=masks,
+            heatmaps_gt, heatmaps_pred, weights=weights,
             reduction=tf.losses.Reduction.SUM)
+        # TODO : add regularization losses
+        losses = {'l2_loss': l2_loss}
+        return losses
 
-        solver = tf.train.AdamOptimizer(learning_rate, epsilon=1e-8)
+    def make_train_op(self, train_cfg):
+        opt = dict(train_cfg.optimizer)
+        opt_name = opt.pop('name', None)
+        if opt_name == 'adam':
+            opt_params = opt.pop('params', {})
+            opt_params['learning_rate'] = train_cfg.learning_rate
+            solver = tf.train.AdamOptimizer(**opt)
+        else:
+            raise NotImplementedError(
+                "Optimizer {} not yet implemented".format(opt['name']))
+
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(update_ops):
-            self.train_op = solver.minimize(loss, global_step=self.global_step)
-            self.loss_op = [clf_loss, reg_loss, mask_loss]
+            train_op = solver.minimize(loss, global_step=self.global_step)
+            loss_op = [l2_loss]
 
 

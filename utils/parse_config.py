@@ -14,7 +14,9 @@ class TrainConfig(yaml.YAMLObject):
                  shuffle_buffer_size=2048,
                  prefetch_size=512,
                  batch_size=2,
-                 learning_rate=0.001):
+                 learning_rate=0.001,
+                 optimizer=None,
+                 augmentation=None):
         self.shuffle = shuffle
         self.filenames_shuffle_buffer_size = filenames_shuffle_buffer_size
         self.num_parallel_map_calls = num_parallel_map_calls
@@ -25,6 +27,12 @@ class TrainConfig(yaml.YAMLObject):
         self.prefetch_size = prefetch_size
         self.batch_size = batch_size
         self.learning_rate = learning_rate
+        if optimizer is None:
+            optimizer = {'name': 'adam'}
+        self.optimizer = optimizer
+        if augmentation is None:
+            augmentation = {}
+        self.augmentation = augmentation
 
     def __repr__(self):
         return 'train_config'

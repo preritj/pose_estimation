@@ -2,7 +2,6 @@
 Pose estimation using mobilenet v2
 """
 
-import collections
 import tensorflow as tf
 from nets import mobilenet_v2 as mobilenet
 from utils import ops
@@ -18,25 +17,29 @@ class MobilenetPose(Model):
         self._skip_layers = cfg.skip_layers
         self._fpn_depth = cfg.fpn_depth
         self._num_keypoints = cfg.num_keypoints
-        super().__init__()
+        self.check_output_shape()
+        super().__init__(cfg)
 
-    def get_output_shape(self):
-        h, w = self._input_shape
+    def check_output_shape(self):
+        h, w = self.cfg.input_shape
+        out_h, out_w = h / 4, w / 4
+        assert ([out_h, out_w] == list(self.cfg.output_shape),
+                "output_shape inconsistent with model output shape")
         return h / 4, w / 4, self._num_keypoints
 
-    def preprocess(self, inputs):
+    def _preprocess(self, inputs):
         """Image preprocessing"""
         return (2.0 / 255.0) * inputs - 1.0
 
-    def build_net(self, preprocessed_inputs):
-        image_features = self.encoder(preprocessed_inputs)
-        out = self.decoder(image_features)
+    def _build_net(self, preprocessed_inputs, is_training=False):
+        image_features = self._encoder(preprocessed_inputs)
+        out = self._decoder(image_features, is_training)
         return out
 
-    def encoder(self, preprocessed_inputs, scope=None):
+    def _encoder(self, preprocessed_inputs, is_training=False, scope=None):
         with tf.variable_scope(scope, 'encoder', preprocessed_inputs):
             with slim.arg_scope(mobilenet.mobilenet_v2_arg_scope(
-                is_training=self._is_training)
+                is_training=is_training)
             ):
                 _, image_features = mobilenet.mobilenet_v2_base(
                     preprocessed_inputs,
@@ -46,7 +49,7 @@ class MobilenetPose(Model):
                     scope=scope)
         return {l: image_features[l] for l in self._skip_layers}
 
-    def decoder(self, image_features, scope=None):
+    def _decoder(self, image_features, is_training=False, scope=None):
         """Builds decoder
         Args:
           image_features: list of image feature tensors to be used for
@@ -58,7 +61,7 @@ class MobilenetPose(Model):
         """
         with tf.variable_scope(scope, 'decoder', image_features):
             with slim.arg_scope(mobilenet.mobilenet_v2_arg_scope(
-                    is_training=self._is_training)
+                    is_training=is_training)
             ):
                 n_skips = len(self._skip_layers)
                 fpn_layers = {}
