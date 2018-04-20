@@ -56,4 +56,10 @@ class Model:
             heatmaps, heatmaps_pred, weights=masks,
             reduction=tf.losses.Reduction.SUM)
 
+        solver = tf.train.AdamOptimizer(learning_rate, epsilon=1e-8)
+        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        with tf.control_dependencies(update_ops):
+            self.train_op = solver.minimize(loss, global_step=self.global_step)
+            self.loss_op = [clf_loss, reg_loss, mask_loss]
+
 
