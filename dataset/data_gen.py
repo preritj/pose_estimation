@@ -6,9 +6,9 @@ from poseTrack import PoseTrack
 import tensorflow as tf
 import functools
 from utils.dataset_util import (
-    normalize_bboxes, normalize_keypoints,
-    random_flip_left_right, random_crop,
-    crop_to_aspect_ratio, keypoints_to_heatmap)
+    normalize_bboxes, normalize_keypoints, random_crop,
+    random_flip_left_right, crop_to_aspect_ratio,
+    keypoints_to_heatmap, resize)
 
 slim_example_decoder = tf.contrib.slim.tfexample_decoder
 
@@ -190,9 +190,17 @@ class PoseDataReader(object):
             num_parallel_calls=train_config.num_parallel_map_calls
         )
         tensor_dataset.prefetch(train_config.prefetch_size)
+        resize_fn = functools.partial(resize, target_size=(360, 360))
+        tensor_dataset = tensor_dataset.map(
+            resize_fn,
+            num_parallel_calls=train_config.num_parallel_map_calls
+        )
+        tensor_dataset.prefetch(train_config.prefetch_size)
         heatmap_fn = functools.partial(keypoints_to_heatmap, sigma=8)
         tensor_dataset = tensor_dataset.map(
             heatmap_fn,
             num_parallel_calls=train_config.num_parallel_map_calls
         )
+        tensor_dataset = tensor_dataset.map(lambda a, b, _, c: (a, b, c))
+        tensor_dataset = tensor_dataset.batch(train_config.batch_size)
         return tensor_dataset.prefetch(train_config.prefetch_size)

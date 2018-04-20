@@ -183,6 +183,16 @@ def crop_to_aspect_ratio(image, keypoints, bboxes, mask,
     return new_image, new_keypoints, new_bboxes, new_mask
 
 
+def resize(image, keypoints, bbox, mask, target_size=(224, 224)):
+    size = list(target_size)
+    new_image = tf.image.resize_images(image, size=size)
+    new_mask = tf.expand_dims(mask, axis=2)
+    new_mask.set_shape([None, None, 1])
+    new_mask = tf.image.resize_images(new_mask, size=size)
+    new_mask = tf.squeeze(new_mask)
+    return new_image, keypoints, bbox, new_mask
+
+
 def _generate_heatmap_plane(center, sigma, shape):
     roi_min = tf.cast(tf.maximum(center - 2 * sigma, 0), tf.int32)
     roi_max = tf.cast(
