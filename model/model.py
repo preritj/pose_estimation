@@ -6,10 +6,11 @@ import tensorflow as tf
 
 
 class Model:
-    def __init__(self):
-        self._is_training = True
-        self._batch_size = 32
-        self._input_shape = (360, 360)
+    def __init__(self, train_cfg, model_cfg):
+        self.cfg = model_cfg
+        self._is_training = train_cfg.is_training
+        self._batch_size = train_cfg.batch_size
+        self._input_shape =
         self._output_shape = self.get_output_shape()
         self.tf_placeholders = self.create_placeholders()
 
@@ -29,23 +30,21 @@ class Model:
                                   shape=(batch_size, out_h, out_w, out_n),
                                   name='heatmaps')
         masks = tf.placeholder(tf.float32,
-                               shape=(batch_size, in_h, in_w),
+                               shape=(batch_size, out_h, out_w),
                                name='masks')
-        return {'images': images, 'heatmaps': heatmaps}
+        return {'images': images,
+                'heatmaps': heatmaps,
+                'masks': masks}
 
     @abstractmethod
     def preprocess(self, inputs):
         """Image preprocessing"""
-        pass
+        raise NotImplementedError("Not yet implemented")
 
     @abstractmethod
     def build_net(self, preprocessed_inputs):
         """Builds network and returns heatmap logits"""
-        pass
-
-    @staticmethod
-    def resize_masks(masks, out_size):
-
+        raise NotImplementedError("Not yet implemented")
 
     def make_train_op(self):
         images = self.tf_placeholders['images']
@@ -53,6 +52,8 @@ class Model:
         masks = self.tf_placeholders['masks']
         images = self.preprocess(images)
         heatmaps_pred = self.build_net(images)
-        loss = tf.nn.l2_loss(heatmaps, )
-        pass
+        l2_loss = tf.losses.mean_squared_error(
+            heatmaps, heatmaps_pred, weights=masks,
+            reduction=tf.losses.Reduction.SUM)
+
 
