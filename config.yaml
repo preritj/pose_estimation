@@ -5,6 +5,7 @@
 is_training: true
 batch_size: 2  
 num_epochs: 0
+learning_rate: 0.001
 shuffle: true
 filenames_shuffle_buffer_size: 100
 num_parallel_map_calls: 2
@@ -20,4 +21,10 @@ prefetch_size: 512
 input_shape: [360, 360]
 output_shape: [90, 90]
 num_keypoints: 15
-
+depth_multiplier: 1.
+min_depth: 8
+skip_layers:
+  - InvertedResidual_32_2
+  - InvertedResidual_64_3
+  - InvertedResidual_160_2
+fpn_depth: 96

@@ -13,7 +13,8 @@ class TrainConfig(yaml.YAMLObject):
                  read_block_length=32,
                  shuffle_buffer_size=2048,
                  prefetch_size=512,
-                 batch_size=2):
+                 batch_size=2,
+                 learning_rate=0.001):
         self.shuffle = shuffle
         self.filenames_shuffle_buffer_size = filenames_shuffle_buffer_size
         self.num_parallel_map_calls = num_parallel_map_calls
@@ -23,6 +24,7 @@ class TrainConfig(yaml.YAMLObject):
         self.shuffle_buffer_size = shuffle_buffer_size
         self.prefetch_size = prefetch_size
         self.batch_size = batch_size
+        self.learning_rate = learning_rate
 
     def __repr__(self):
         return 'train_config'
@@ -34,10 +36,24 @@ class ModelConfig(yaml.YAMLObject):
     def __init__(self,
                  input_shape=None,
                  output_shape=None,
-                 num_keypoints=15):
+                 num_keypoints=15,
+                 depth_multiplier=1.,
+                 min_depth=8,
+                 skip_layers=None,
+                 fpn_depth=96):
+        if input_shape is None:
+            input_shape = [224, 224]
+        if output_shape is None:
+            output_shape = input_shape
         self.input_shape = input_shape
         self.output_shape = output_shape
         self.num_keypoints = num_keypoints
+        self.depth_multiplier = depth_multiplier
+        self.min_depth = min_depth
+        if skip_layers is None:
+            skip_layers = []
+        self.skip_layers = skip_layers
+        self.fpn_depth = fpn_depth
 
     def __repr__(self):
         return 'model_config'

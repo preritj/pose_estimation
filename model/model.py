@@ -6,23 +6,17 @@ import tensorflow as tf
 
 
 class Model:
-    def __init__(self, train_cfg, model_cfg):
+    def __init__(self, model_cfg):
         self.cfg = model_cfg
-        self._is_training = train_cfg.is_training
-        self._batch_size = train_cfg.batch_size
-        self._input_shape =
-        self._output_shape = self.get_output_shape()
-        self.tf_placeholders = self.create_placeholders()
 
     @abstractmethod
     def get_output_shape(self):
         """output shape of the heatmaps"""
         pass
 
-    def create_placeholders(self):
-        batch_size = self._batch_size
-        in_h, in_w = self._input_shape
-        out_h, out_w, out_n = self._output_shape
+    def create_placeholders(self, batch_size):
+        in_h, in_w = self.cfg.input_shape
+        out_h, out_w, out_n = self.cfg.output_shape
         images = tf.placeholder(tf.float32,
                                 shape=(batch_size, in_h, in_w, 3),
                                 name='images')
@@ -46,10 +40,15 @@ class Model:
         """Builds network and returns heatmap logits"""
         raise NotImplementedError("Not yet implemented")
 
-    def make_train_op(self):
-        images = self.tf_placeholders['images']
-        heatmaps = self.tf_placeholders['heatmaps']
-        masks = self.tf_placeholders['masks']
+    def make_train_op(self, train_cfg):
+        learning_rate = train_cfg.learning_rate
+        batch_size = train_cfg.batch_size
+        tf_placeholders = self.create_placeholders(batch_size)
+
+        images = tf_placeholders['images']
+        heatmaps = tf_placeholders['heatmaps']
+        masks = tf_placeholders['masks']
+
         images = self.preprocess(images)
         heatmaps_pred = self.build_net(images)
         l2_loss = tf.losses.mean_squared_error(

@@ -12,14 +12,12 @@ slim = tf.contrib.slim
 
 
 class MobilenetPose(Model):
-    def __init(self):
-        self._depth_multiplier = 1.0
-        self._min_depth = 8
-        self._skip_layers = ['InvertedResidual_32_2',
-                             'InvertedResidual_64_3',
-                             'InvertedResidual_160_2']
-        self._fpn_depth = 96
-        self._num_keypoints = 15
+    def __init(self, cfg):
+        self._depth_multiplier = cfg.depth_multiplier
+        self._min_depth = cfg.min_depth
+        self._skip_layers = cfg.skip_layers
+        self._fpn_depth = cfg.fpn_depth
+        self._num_keypoints = cfg.num_keypoints
         super().__init__()
 
     def get_output_shape(self):
