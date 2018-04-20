@@ -142,7 +142,26 @@ class PoseDataReader(object):
                                                         items_to_handlers)
         return decoder
 
-    def read_data(self, train_config):
+    def augment_data(self, dataset, train_config):
+        dataset = dataset.map(
+            random_flip_left_right,
+            num_parallel_calls=train_config.num_parallel_map_calls
+        )
+        dataset.prefetch(train_config.prefetch_size)
+        dataset = dataset.map(
+            random_crop,
+            num_parallel_calls=train_config.num_parallel_map_calls
+        )
+        dataset.prefetch(train_config.prefetch_size)
+        crop_to_aspect_ratio_fn = functools.partial(
+            crop_to_aspect_ratio, aspect_ratio=1.)
+        dataset = dataset.map(
+            crop_to_aspect_ratio_fn,
+            num_parallel_calls=train_config.num_parallel_map_calls
+        )
+        return dataset.prefetch(train_config.prefetch_size)
+
+    def read_data(self, train_config, model_config):
         probs = self._get_probs()
         probs = tf.cast(probs, tf.float32)
         decoder = self._decoder()
@@ -168,39 +187,29 @@ class PoseDataReader(object):
                 block_length=train_config.read_block_length, sloppy=True))
         if train_config.shuffle:
             records_dataset.shuffle(train_config.shuffle_buffer_size)
-        # records_dataset = records_dataset.batch(config.batch_size)
+
         decode_fn = functools.partial(
             decoder.decode, items=['image', 'keypoints', 'bbox', 'mask'])
-        tensor_dataset = records_dataset.map(
+        dataset = records_dataset.map(
             decode_fn, num_parallel_calls=train_config.num_parallel_map_calls)
-        tensor_dataset = tensor_dataset.map(
-            random_flip_left_right,
-            num_parallel_calls=train_config.num_parallel_map_calls
-        )
-        tensor_dataset.prefetch(train_config.prefetch_size)
-        tensor_dataset = tensor_dataset.map(
-            random_crop,
-            num_parallel_calls=train_config.num_parallel_map_calls
-        )
-        tensor_dataset.prefetch(train_config.prefetch_size)
-        crop_to_aspect_ratio_fn = functools.partial(
-            crop_to_aspect_ratio, aspect_ratio=1.)
-        tensor_dataset = tensor_dataset.map(
-            crop_to_aspect_ratio_fn,
-            num_parallel_calls=train_config.num_parallel_map_calls
-        )
-        tensor_dataset.prefetch(train_config.prefetch_size)
-        resize_fn = functools.partial(resize, target_size=(360, 360))
-        tensor_dataset = tensor_dataset.map(
+        dataset = self.augment_data(dataset, train_config)
+
+        resize_fn = functools.partial(
+            resize,
+            target_image_size=model_config.input_size,
+            target_mask_size=model_config.output_size)
+        dataset = dataset.map(
             resize_fn,
             num_parallel_calls=train_config.num_parallel_map_calls
         )
-        tensor_dataset.prefetch(train_config.prefetch_size)
+        dataset.prefetch(train_config.prefetch_size)
         heatmap_fn = functools.partial(keypoints_to_heatmap, sigma=8)
-        tensor_dataset = tensor_dataset.map(
+        dataset = dataset.map(
             heatmap_fn,
             num_parallel_calls=train_config.num_parallel_map_calls
         )
-        tensor_dataset = tensor_dataset.map(lambda a, b, _, c: (a, b, c))
-        tensor_dataset = tensor_dataset.batch(train_config.batch_size)
-        return tensor_dataset.prefetch(train_config.prefetch_size)
+
+        # TODO : build padding for bbox batching, for now we remove bbox
+        dataset = dataset.map(lambda a, b, _, c: (a, b, c))
+        dataset = dataset.batch(train_config.batch_size)
+        return dataset.prefetch(train_config.prefetch_size)

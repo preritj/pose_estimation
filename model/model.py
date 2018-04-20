@@ -28,6 +28,9 @@ class Model:
         heatmaps = tf.placeholder(tf.float32,
                                   shape=(batch_size, out_h, out_w, out_n),
                                   name='heatmaps')
+        masks = tf.placeholder(tf.float32,
+                               shape=(batch_size, in_h, in_w),
+                               name='masks')
         return {'images': images, 'heatmaps': heatmaps}
 
     @abstractmethod
@@ -40,10 +43,16 @@ class Model:
         """Builds network and returns heatmap logits"""
         pass
 
+    @staticmethod
+    def resize_masks(masks, out_size):
+
+
     def make_train_op(self):
         images = self.tf_placeholders['images']
+        heatmaps = self.tf_placeholders['heatmaps']
+        masks = self.tf_placeholders['masks']
         images = self.preprocess(images)
-        heatmap_logits = self.build_net(images)
-
+        heatmaps_pred = self.build_net(images)
+        loss = tf.nn.l2_loss(heatmaps, )
         pass
 

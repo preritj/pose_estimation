@@ -183,12 +183,17 @@ def crop_to_aspect_ratio(image, keypoints, bboxes, mask,
     return new_image, new_keypoints, new_bboxes, new_mask
 
 
-def resize(image, keypoints, bbox, mask, target_size=(224, 224)):
-    size = list(target_size)
-    new_image = tf.image.resize_images(image, size=size)
+def resize(image, keypoints, bbox, mask,
+           target_image_size=(224, 224),
+           target_mask_size=None):
+    img_size = list(target_image_size)
+    if target_mask_size is None:
+        target_mask_size = img_size
+    mask_size = list(target_mask_size)
+    new_image = tf.image.resize_images(image, size=img_size)
     new_mask = tf.expand_dims(mask, axis=2)
     new_mask.set_shape([None, None, 1])
-    new_mask = tf.image.resize_images(new_mask, size=size)
+    new_mask = tf.image.resize_images(new_mask, size=mask_size)
     new_mask = tf.squeeze(new_mask)
     return new_image, keypoints, bbox, new_mask
 
