@@ -5,8 +5,8 @@ from pose_data import PoseData
 
 
 class COCO(PoseData):
-    def __init__(self, image_dir, annotation_files=None):
-        super().__init__(image_dir, annotation_files)
+    def __init__(self, pose_cfg, image_dir, annotation_files=None):
+        super().__init__(pose_cfg, image_dir, annotation_files)
 
     def _build_dataset(self, dataset):
         for img in dataset['images']:

@@ -4,9 +4,9 @@ from pose_data import PoseData
 
 
 class MPII(PoseData):
-    def __init__(self, image_dir, annotation_files=None):
+    def __init__(self, pose_cfg, image_dir, annotation_files=None):
         self.idx_count = 0
-        super().__init__(image_dir, annotation_files)
+        super().__init__(pose_cfg, image_dir, annotation_files)
 
     def _build_dataset(self, dataset, kp_dict):
         dataset = dataset['RELEASE'][0]
@@ -18,7 +18,7 @@ class MPII(PoseData):
             self.idx_count += 1
             img_name = annotations['image'][0]['name']
             self.imgs[img_id] = {'filename': img_name,
-                            'shape': [0, 0]}
+                                 'shape': [0, 0]}
             if not is_train:
                 continue
             persons = annotations['annorect']

@@ -1,6 +1,24 @@
 import yaml
 
 
+class DataConfig(yaml.YAMLObject):
+    yaml_tag = u'!data'
+
+    def __init__(self,
+                 datasets,
+                 keypoints,
+                 skeleton,
+                 sigma=8):
+        assert len(datasets) > 0, "Specify datasets"
+        self.datasets = datasets
+        self.keypoints = keypoints
+        self.skeleton = skeleton
+        self.sigma = sigma
+
+    def __repr__(self):
+        return 'data_config'
+
+
 class TrainConfig(yaml.YAMLObject):
     yaml_tag = u'!train'
 
@@ -16,7 +34,8 @@ class TrainConfig(yaml.YAMLObject):
                  batch_size=2,
                  learning_rate=0.001,
                  optimizer=None,
-                 augmentation=None):
+                 augmentation=None,
+                 preprocess=None):
         self.shuffle = shuffle
         self.filenames_shuffle_buffer_size = filenames_shuffle_buffer_size
         self.num_parallel_map_calls = num_parallel_map_calls
@@ -30,9 +49,8 @@ class TrainConfig(yaml.YAMLObject):
         if optimizer is None:
             optimizer = {'name': 'adam'}
         self.optimizer = optimizer
-        if augmentation is None:
-            augmentation = {}
         self.augmentation = augmentation
+        self.preprocess = preprocess
 
     def __repr__(self):
         return 'train_config'
@@ -44,7 +62,7 @@ class ModelConfig(yaml.YAMLObject):
     def __init__(self,
                  input_shape=None,
                  output_shape=None,
-                 num_keypoints=15,
+                 keypoints=None,
                  depth_multiplier=1.,
                  min_depth=8,
                  skip_layers=None,
@@ -55,7 +73,9 @@ class ModelConfig(yaml.YAMLObject):
             output_shape = input_shape
         self.input_shape = input_shape
         self.output_shape = output_shape
-        self.num_keypoints = num_keypoints
+        if keypoints is None:
+            keypoints = []
+        self.keypoints = keypoints
         self.depth_multiplier = depth_multiplier
         self.min_depth = min_depth
         if skip_layers is None:

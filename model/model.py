@@ -48,7 +48,7 @@ class Model:
             solver = tf.train.AdamOptimizer(**opt)
         else:
             raise NotImplementedError(
-                "Optimizer {} not yet implemented".format(opt['name']))
+                "Optimizer {} not yet implemented".format(opt_name))
 
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         with tf.control_dependencies(update_ops):

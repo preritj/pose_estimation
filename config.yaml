@@ -1,27 +1,111 @@
 ###########################################
+# data parameters
+###########################################
+--- !data
+# add datasets here:
+# name, data_dir, img_dir and tfrecord_path must be specified
+# annotation files must be specified if tfrecord doesn't exist
+# weight defaults to 1. if not specified
+# overwrite_tfrecord defaults to false if not specified
+
+# For example to include coco train and validation sets:
+# datasets:
+#  - name: coco
+#    data_dir: /media/storage/datasets/pose/coco
+#    img_dir: images/train2017
+#    tfrecord_path: tfrecords/train2017.records
+#    annotation_files: annotations/person_keypoints_train2017.json
+#  - name: coco
+#    data_dir: /media/storage/datasets/pose/coco
+#    img_dir: images/val2017
+#    tfrecord_path: tfrecords/val2017.records
+#    annotation_files: annotations/person_keypoints_val2017.json
+
+datasets:
+  - name: ava
+    data_dir: /media/easystore/TrainData
+    img_dir: .
+    tfrecord_path: tfrecords/test.records
+    annotation_files: Annotations/test.json
+    weight: 1.
+    overwrite_tfrecord: false
+
+
+# keypoints lookup dictionary
+keypoints:
+  head: 0
+  nose: 1
+  neck: 2
+  left_shoulder: 3
+  right_shoulder: 4
+  left_elbow: 5
+  right_elbow: 6
+  left_wrist: 7
+  right_wrist: 8
+  left_hip: 9
+  right_hip: 10
+  left_knee: 11
+  right_knee: 12
+  left_ankle: 13
+  right_ankle: 14
+
+# segments constructed using keypoints
+skeleton:
+  - [0, 1]
+  - [1, 2]
+  - [2, 3]
+  - [2, 4]
+  - [2, 9]
+  - [2, 10]
+  - [3, 5]
+  - [4, 6]
+  - [5, 7]
+  - [6, 8]
+  - [9, 11]
+  - [10, 12]
+  - [11, 13]
+  - [12, 14]
+
+# keypoint uncertainty in pixels
+# [this can also be considered as a model parameter]
+sigma: 8
+
+
+
+###########################################
 # training parameters
 ###########################################
 --- !train
 is_training: true
-batch_size: 2  
 num_epochs: 0
 learning_rate: 0.001
+
+batch_size: 2
 shuffle: true
+
+
 augmentation:
   flip_left_right: true
   random_crop: true
+
+preprocess:
+  keep_aspect_ratio: true
+  image_resize: [360, 360]
+  mask_resize: [90, 90]
+
 optimizer:
   name: adam
   params:
     beta1: 0.9
     beta2: 0.999
     epsilon: 1e-8
+
 filenames_shuffle_buffer_size: 100
 num_parallel_map_calls: 2
-num_readers: 32
+num_readers: 2  #32
 read_block_length: 32
 shuffle_buffer_size: 2048
-prefetch_size: 512
+prefetch_size: 32  #512
 
 ###########################################
 # model parameters
@@ -29,11 +113,17 @@ prefetch_size: 512
 --- !model
 input_shape: [360, 360]
 output_shape: [90, 90]
-num_keypoints: 15
+
+keypoints:
+  - left_wrist
+  - right_wrist
+
 depth_multiplier: 1.
 min_depth: 8
+
 skip_layers:
   - InvertedResidual_32_2
   - InvertedResidual_64_3
   - InvertedResidual_160_2
+
 fpn_depth: 96

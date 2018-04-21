@@ -7,10 +7,10 @@ from PIL import Image
 
 
 class PoseTrack(PoseData):
-    def __init__(self, image_dir, annotation_files=None):
+    def __init__(self, pose_cfg, image_dir, annotation_files=None):
         self.idx_count = 0
         self.idx_map = {}
-        super().__init__(image_dir, annotation_files)
+        super().__init__(pose_cfg, image_dir, annotation_files)
 
     def _build_dataset(self, dataset, kp_dict):
         for i, annotations in enumerate(dataset['annolist']):

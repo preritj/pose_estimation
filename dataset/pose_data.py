@@ -13,7 +13,7 @@ import tensorflow as tf
 
 
 class PoseData(object):
-    def __init__(self, image_dir, annotation_files=None):
+    def __init__(self, pose_cfg, image_dir, annotation_files=None):
         """
         Constructor of Pose class for reading and visualizing annotations
          from human pose datasets.
@@ -24,25 +24,10 @@ class PoseData(object):
         """
         self.image_dir = image_dir
         assert os.path.exists(image_dir), "Image directory not found"
-        self.num_keypoints = 15
+        self.keypoints = pose_cfg['keypoints']
+        self.num_keypoints = pose_cfg['num_keypoints']
+        self.skeleton = pose_cfg['skeleton']
         self.dataset_count = -1
-        self.keypoints = {'head': 0,
-                          'nose': 1,
-                          'neck': 2,
-                          'left_shoulder': 3,
-                          'right_shoulder': 4,
-                          'left_elbow': 5,
-                          'right_elbow': 6,
-                          'left_wrist': 7,
-                          'right_wrist': 8,
-                          'left_hip': 9,
-                          'right_hip': 10,
-                          'left_knee': 11,
-                          'right_knee': 12,
-                          'left_ankle': 13,
-                          'right_ankle': 14}
-        self.skeleton = [[0, 1], [1, 2], [2, 3], [2, 4], [2, 9], [2, 10], [3, 5],
-                         [4, 6], [5, 7], [6, 8], [9, 11], [10, 12], [11, 13], [12, 14]]
         self.imgs, self.ids, self.anns, self.masks = None, None, None, None
         self.sigma = 10.
         if annotation_files is not None:
@@ -53,8 +38,8 @@ class PoseData(object):
                 annotation_files = [annotation_files]
             for ann_file in annotation_files:
                 dataset = json.load(open(ann_file, 'r'))
-                assert type(dataset) == dict, \
-                    'annotation file format {} not supported'.format(type(dataset))
+                #assert type(dataset) == (dict or list), \
+                #    'annotation file format {} not supported'.format(type(dataset))
                 self.datasets.append(dataset)
             print('Done (t={:0.2f}s)'.format(time.time() - tic))
             self.create_index()

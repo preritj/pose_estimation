@@ -3,6 +3,7 @@ import numpy as np
 from coco import COCO
 from mpii import MPII
 from poseTrack import PoseTrack
+from avaRetail import AVAretail
 import tensorflow as tf
 import functools
 from utils.dataset_util import (
@@ -14,24 +15,43 @@ slim_example_decoder = tf.contrib.slim.tfexample_decoder
 
 
 class PoseDataReader(object):
-    def __init__(self, num_keypoints=15):
+    def __init__(self, data_cfg):
+        self.data_cfg = data_cfg
         self.datasets = []
-        self.num_keypoints = num_keypoints
+        self.num_keypoints = len(data_cfg.keypoints)
+        self.pose_cfg = {'keypoints': data_cfg.keypoints,
+                         'skeleton': data_cfg.skeleton,
+                         'num_keypoints': self.num_keypoints}
+
+        for dataset in data_cfg.datasets:
+            params = dict(dataset)
+            data_dir = params.pop('data_dir')
+            params['img_dir'] = os.path.join(
+                data_dir, dataset['img_dir'])
+            params['tfrecord_path'] = os.path.join(
+                data_dir, dataset['tfrecord_path'])
+            if 'annotation_files' in params.keys():
+                params['annotation_files'] = os.path.join(
+                    data_dir, dataset['annotation_files'])
+            self.add_dataset(**params)
 
     def add_dataset(self, name, img_dir, tfrecord_path,
                     annotation_files=None, weight=1.,
-                    overwrite_tfrecords=False):
+                    overwrite_tfrecord=False):
         tfrecord_dir = os.path.dirname(tfrecord_path)
         if not os.path.exists(tfrecord_dir):
             os.makedirs(tfrecord_dir)
-            overwrite_tfrecords = True
-        if overwrite_tfrecords:
+        if not os.path.exists(tfrecord_path):
+            overwrite_tfrecord = True
+        if overwrite_tfrecord:
             if name == 'coco':
-                ds = COCO(img_dir, annotation_files)
+                ds = COCO(self.pose_cfg, img_dir, annotation_files)
             elif name == 'mpii':
-                ds = MPII(img_dir, annotation_files)
+                ds = MPII(self.pose_cfg, img_dir, annotation_files)
             elif name == 'posetrack':
-                ds = PoseTrack(img_dir, annotation_files)
+                ds = PoseTrack(self.pose_cfg, img_dir, annotation_files)
+            elif name == 'ava':
+                ds = AVAretail(self.pose_cfg, img_dir, annotation_files)
             else:
                 raise RuntimeError('Dataset not supported')
             ds.create_tf_record(tfrecord_path)
@@ -142,26 +162,48 @@ class PoseDataReader(object):
                                                         items_to_handlers)
         return decoder
 
-    def augment_data(self, dataset, train_config):
-        dataset = dataset.map(
-            random_flip_left_right,
-            num_parallel_calls=train_config.num_parallel_map_calls
-        )
-        dataset.prefetch(train_config.prefetch_size)
-        dataset = dataset.map(
-            random_crop,
-            num_parallel_calls=train_config.num_parallel_map_calls
-        )
-        dataset.prefetch(train_config.prefetch_size)
-        crop_to_aspect_ratio_fn = functools.partial(
-            crop_to_aspect_ratio, aspect_ratio=1.)
-        dataset = dataset.map(
-            crop_to_aspect_ratio_fn,
-            num_parallel_calls=train_config.num_parallel_map_calls
-        )
-        return dataset.prefetch(train_config.prefetch_size)
+    def augment_data(self, dataset, train_cfg):
+        aug_cfg = train_cfg.augmentation
+        if aug_cfg['flip_left_right']:
+            dataset = dataset.map(
+                random_flip_left_right,
+                num_parallel_calls=train_cfg.num_parallel_map_calls
+            )
+            dataset = dataset.prefetch(train_cfg.prefetch_size)
+        if aug_cfg['random_crop']:
+            dataset = dataset.map(
+                random_crop,
+                num_parallel_calls=train_cfg.num_parallel_map_calls
+            )
+            dataset = dataset.prefetch(train_cfg.prefetch_size)
 
-    def read_data(self, train_config, model_config):
+        return dataset
+
+    def preprocess_data(self, dataset, train_cfg):
+        preprocess_cfg = train_cfg.preprocess
+        img_size = preprocess_cfg['image_resize']
+        mask_size = preprocess_cfg['mask_resize']
+        if preprocess_cfg['keep_aspect_ratio']:
+            aspect_ratio = img_size[1] / img_size[0]
+            crop_to_aspect_ratio_fn = functools.partial(
+                crop_to_aspect_ratio, aspect_ratio=aspect_ratio)
+            dataset = dataset.map(
+                crop_to_aspect_ratio_fn,
+                num_parallel_calls=train_cfg.num_parallel_map_calls
+            )
+            dataset.prefetch(train_cfg.prefetch_size)
+        resize_fn = functools.partial(
+            resize,
+            target_image_size=img_size,
+            target_mask_size=mask_size)
+        dataset = dataset.map(
+            resize_fn,
+            num_parallel_calls=train_cfg.num_parallel_map_calls
+        )
+        dataset.prefetch(train_cfg.prefetch_size)
+        return dataset
+
+    def read_data(self, train_config):
         probs = self._get_probs()
         probs = tf.cast(probs, tf.float32)
         decoder = self._decoder()
@@ -194,20 +236,14 @@ class PoseDataReader(object):
             decode_fn, num_parallel_calls=train_config.num_parallel_map_calls)
         dataset = self.augment_data(dataset, train_config)
 
-        resize_fn = functools.partial(
-            resize,
-            target_image_size=model_config.input_size,
-            target_mask_size=model_config.output_size)
-        dataset = dataset.map(
-            resize_fn,
-            num_parallel_calls=train_config.num_parallel_map_calls
-        )
-        dataset.prefetch(train_config.prefetch_size)
-        heatmap_fn = functools.partial(keypoints_to_heatmap, sigma=8)
+        dataset = self.preprocess_data(dataset, train_config)
+        heatmap_fn = functools.partial(
+            keypoints_to_heatmap, sigma=self.data_cfg.sigma)
         dataset = dataset.map(
             heatmap_fn,
             num_parallel_calls=train_config.num_parallel_map_calls
         )
+        dataset = dataset.prefetch(train_config.prefetch_size)
 
         # TODO : build padding for bbox batching, for now we remove bbox
         dataset = dataset.map(lambda a, b, _, c: (a, b, c))
