@@ -91,7 +91,6 @@ augmentation:
 preprocess:
   keep_aspect_ratio: true
   image_resize: [360, 360]
-  mask_resize: [90, 90]
 
 optimizer:
   name: adam

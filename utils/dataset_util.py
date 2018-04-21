@@ -160,9 +160,6 @@ def crop_to_aspect_ratio(image, keypoints, bboxes, mask,
                                      true_fn=_require_bbox_in_crop,
                                      false_fn=_basic_crop)
 
-    # minval = tf.minimum(offset_min, offset_max)
-    # maxval = tf.maximum(offset_min, offset_max)
-
     offset_h = random_int(maxval=offset_max[0], minval=offset_min[0])
     offset_w = random_int(maxval=offset_max[1], minval=offset_min[1])
 

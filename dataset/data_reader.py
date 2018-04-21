@@ -182,7 +182,6 @@ class PoseDataReader(object):
     def preprocess_data(self, dataset, train_cfg):
         preprocess_cfg = train_cfg.preprocess
         img_size = preprocess_cfg['image_resize']
-        mask_size = preprocess_cfg['mask_resize']
         if preprocess_cfg['keep_aspect_ratio']:
             aspect_ratio = img_size[1] / img_size[0]
             crop_to_aspect_ratio_fn = functools.partial(
@@ -194,8 +193,7 @@ class PoseDataReader(object):
             dataset.prefetch(train_cfg.prefetch_size)
         resize_fn = functools.partial(
             resize,
-            target_image_size=img_size,
-            target_mask_size=mask_size)
+            target_image_size=img_size)
         dataset = dataset.map(
             resize_fn,
             num_parallel_calls=train_cfg.num_parallel_map_calls
