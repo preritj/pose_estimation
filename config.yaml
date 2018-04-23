@@ -22,6 +22,11 @@
 #    annotation_files: annotations/person_keypoints_val2017.json
 
 datasets:
+#  - name: coco
+#    data_dir: /media/storage/datasets/pose/coco
+#    img_dir: images/val2017
+#    tfrecord_path: tfrecords/val2017.records
+#    annotation_files: annotations/person_keypoints_val2017.json
   - name: ava
     data_dir: /media/easystore/TrainData
     img_dir: .
@@ -87,9 +92,9 @@ shuffle: true
 augmentation:
   flip_left_right: true
   random_crop: true
+  scale_range: [0.5, 2.]
 
 preprocess:
-  keep_aspect_ratio: true
   image_resize: [360, 360]
 
 optimizer:

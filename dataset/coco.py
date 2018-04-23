@@ -22,8 +22,8 @@ class COCO(PoseData):
             img = self.imgs[ann['image_id']]
             img_area = np.product(img['shape'])
             num_keypoints = ann['num_keypoints']
-            if ann['iscrowd'] or (area > .3 * img_area and num_keypoints < 5) \
-                    or (num_keypoints < 2):
+            if ann['iscrowd'] or (area > .8 * img_area and num_keypoints < 5) \
+                    or (num_keypoints < 1):
                 ignore_region = ann['segmentation']
                 self.masks[ann['image_id']].append(
                     {'ignore_region': ignore_region})

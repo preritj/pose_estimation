@@ -88,12 +88,18 @@ class PoseDataReader(object):
             keys_to_tensors['image/mask/y'])
         shape = PoseDataReader._get_tensor(
             keys_to_tensors['image/shape'])
-        indices = tf.stack([mask_x, mask_y], axis=1)
-        values = tf.ones_like(mask_x)
-        mask = tf.SparseTensor(indices=indices, values=values,
-                               dense_shape=shape)
-        mask = tf.sparse_tensor_to_dense(mask, default_value=0)
-        mask = 1 - mask
+
+        def _generate_mask():
+            indices = tf.stack([mask_x, mask_y], axis=1)
+            values = tf.zeros_like(mask_x)
+            mask = tf.SparseTensor(indices=indices, values=values,
+                                   dense_shape=shape)
+            mask = tf.sparse_tensor_to_dense(mask, default_value=1)
+            return tf.cast(mask, tf.int32)
+
+        mask = tf.cond(tf.greater(tf.rank(mask_x), 0),
+                       true_fn=_generate_mask,
+                       false_fn=lambda: tf.ones(shape, tf.int32))
         return mask
 
     @staticmethod
@@ -164,15 +170,20 @@ class PoseDataReader(object):
 
     def augment_data(self, dataset, train_cfg):
         aug_cfg = train_cfg.augmentation
+        preprocess_cfg = train_cfg.preprocess
+        img_size = preprocess_cfg['image_resize']
         if aug_cfg['flip_left_right']:
             dataset = dataset.map(
                 random_flip_left_right,
                 num_parallel_calls=train_cfg.num_parallel_map_calls
             )
             dataset = dataset.prefetch(train_cfg.prefetch_size)
+        random_crop_fn = functools.partial(
+            random_crop,
+            crop_size=img_size)
         if aug_cfg['random_crop']:
             dataset = dataset.map(
-                random_crop,
+                random_crop_fn,
                 num_parallel_calls=train_cfg.num_parallel_map_calls
             )
             dataset = dataset.prefetch(train_cfg.prefetch_size)
@@ -182,15 +193,15 @@ class PoseDataReader(object):
     def preprocess_data(self, dataset, train_cfg):
         preprocess_cfg = train_cfg.preprocess
         img_size = preprocess_cfg['image_resize']
-        if preprocess_cfg['keep_aspect_ratio']:
-            aspect_ratio = img_size[1] / img_size[0]
-            crop_to_aspect_ratio_fn = functools.partial(
-                crop_to_aspect_ratio, aspect_ratio=aspect_ratio)
-            dataset = dataset.map(
-                crop_to_aspect_ratio_fn,
-                num_parallel_calls=train_cfg.num_parallel_map_calls
-            )
-            dataset.prefetch(train_cfg.prefetch_size)
+        # if preprocess_cfg['keep_aspect_ratio']:
+        #     aspect_ratio = img_size[1] / img_size[0]
+        #     crop_to_aspect_ratio_fn = functools.partial(
+        #         crop_to_aspect_ratio, aspect_ratio=aspect_ratio)
+        #     dataset = dataset.map(
+        #         crop_to_aspect_ratio_fn,
+        #         num_parallel_calls=train_cfg.num_parallel_map_calls
+        #     )
+        #     dataset.prefetch(train_cfg.prefetch_size)
         resize_fn = functools.partial(
             resize,
             target_image_size=img_size)
