@@ -77,6 +77,7 @@ class PoseDataReader(object):
     def _image_decoder(keys_to_tensors):
         filename = keys_to_tensors['image/filename']
         image_string = tf.read_file(filename)
+        # TODO: decode after crop to increase speed
         image_decoded = tf.image.decode_jpeg(image_string, channels=3)
         return image_decoded
 
@@ -89,18 +90,13 @@ class PoseDataReader(object):
         shape = PoseDataReader._get_tensor(
             keys_to_tensors['image/shape'])
 
-        def _generate_mask():
-            indices = tf.stack([mask_x, mask_y], axis=1)
-            values = tf.zeros_like(mask_x)
-            mask = tf.SparseTensor(indices=indices, values=values,
-                                   dense_shape=shape)
-            mask = tf.sparse_tensor_to_dense(mask, default_value=1)
-            return tf.cast(mask, tf.int32)
-
-        mask = tf.cond(tf.greater(tf.rank(mask_x), 0),
-                       true_fn=_generate_mask,
-                       false_fn=lambda: tf.ones(shape, tf.int32))
-        return mask
+        indices = tf.stack([mask_x, mask_y], axis=1)
+        values = tf.zeros_like(mask_x)
+        mask = tf.SparseTensor(indices=indices, values=values,
+                               dense_shape=shape)
+        # TODO: possibly do sparse to dense coversion after crop
+        mask = tf.sparse_tensor_to_dense(mask, default_value=1)
+        return tf.cast(mask, tf.int32)
 
     @staticmethod
     def _keypoints_decoder(keys_to_tensor, num_keypoints=15):
@@ -256,5 +252,9 @@ class PoseDataReader(object):
 
         # TODO : build padding for bbox batching, for now we remove bbox
         dataset = dataset.map(lambda a, b, _, c: (a, b, c))
+        dataset = dataset.prefetch(train_config.prefetch_size)
         dataset = dataset.batch(train_config.batch_size)
-        return dataset.prefetch(train_config.prefetch_size)
+        dataset = dataset.prefetch(train_config.prefetch_size)
+        iterator = dataset.make_one_shot_iterator()
+        image_batch, heatmaps_batch, mask_batch = iterator.get_next()
+        return image_batch, heatmaps_batch, mask_batch
