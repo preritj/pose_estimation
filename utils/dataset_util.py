@@ -21,9 +21,13 @@ def normalize_keypoints(keypoints, img_shape):
     return tf.concat([x / img_w, y / img_h, v], 2)
 
 
-def flip_left_right_keypoints(keypoints):
+def flip_left_right_keypoints(keypoints, flipped_keypoint_indices):
     x, y, v = tf.split(value=keypoints, num_or_size_splits=3, axis=2)
-    return tf.concat([1. - x, y, v], 2)
+    flipped_keypoints = tf.concat([1. - x, y, v], 2)
+    flipped_keypoints = tf.gather(flipped_keypoints,
+                                  flipped_keypoint_indices,
+                                  axis=1)
+    return flipped_keypoints
 
 
 def flip_left_right_bboxes(bboxes):
@@ -32,7 +36,8 @@ def flip_left_right_bboxes(bboxes):
     return tf.concat([ymin, 1. - xmax, ymax, 1. - xmin], 1)
 
 
-def random_flip_left_right(img, keypoints, bboxes, mask):
+def random_flip_left_right(img, keypoints, bboxes, mask,
+                           flipped_keypoint_indices):
     random_var = random_int(2)
     random_var = tf.cast(random_var, tf.bool)
     flipped_img = tf.cond(random_var,
@@ -45,7 +50,8 @@ def random_flip_left_right(img, keypoints, bboxes, mask):
     flipped_mask = tf.squeeze(flipped_mask)
     flipped_keypoints = tf.cond(
         random_var,
-        true_fn=lambda: flip_left_right_keypoints(keypoints),
+        true_fn=lambda: flip_left_right_keypoints(
+            keypoints, flipped_keypoint_indices),
         false_fn=lambda: tf.identity(keypoints))
     flipped_bbox = tf.cond(
         random_var,
@@ -145,101 +151,6 @@ def random_crop(image, keypoints, bboxes, mask,
     offset_min = tf.where(tf.less_equal(offset_max, offset_min),
                           tf.constant([0, 0]),
                           offset_min)
-
-    offset_h = random_int(maxval=offset_max[0], minval=offset_min[0])
-    offset_w = random_int(maxval=offset_max[1], minval=offset_min[1])
-
-    new_image = tf.image.crop_to_bounding_box(
-        image, offset_h, offset_w, crop_h, crop_w)
-    new_mask = tf.expand_dims(mask, 2)
-    new_mask = tf.image.crop_to_bounding_box(
-        new_mask, offset_h, offset_w, crop_h, crop_w)
-    new_mask = tf.squeeze(new_mask)
-    crop_box = tf.stack([
-        tf.to_float(offset_h) / img_h,
-        tf.to_float(offset_w) / img_w,
-        tf.to_float(offset_h + crop_h) / img_h,
-        tf.to_float(offset_w + crop_w) / img_w
-    ])
-    new_bboxes, new_keypoints = prune_bboxes_keypoints(
-        bboxes, keypoints, crop_box)
-    return new_image, new_keypoints, new_bboxes, new_mask
-
-
-def _random_crop(image, keypoints, bboxes, mask):
-    # treat each bbox as a batch, so reshape from [N, 4] to [N, 1, 4]
-    boxes_expanded = tf.expand_dims(tf.clip_by_value(
-        bboxes, clip_value_min=0.0, clip_value_max=1.0), 1)
-    # require patch to have one full bbox
-    img_begin, img_size, crop_box = tf.image.sample_distorted_bounding_box(
-        tf.shape(image),
-        boxes_expanded,
-        min_object_covered=1.,
-        area_range=[0.1, 1.],
-        aspect_ratio_range=[.75, 1.33],
-        use_image_if_no_bounding_boxes=True
-    )
-    crop_box = tf.squeeze(crop_box)
-    new_image = tf.slice(image, img_begin, img_size)
-    new_image.set_shape([None, None, image.get_shape()[2]])
-    mask_begin = img_begin[:2]
-    mask_size = img_size[:2]
-    new_mask = tf.slice(mask, mask_begin, mask_size)
-    new_bboxes, new_keypoints = prune_bboxes_keypoints(
-        bboxes, keypoints, crop_box)
-    return new_image, new_keypoints, new_bboxes, new_mask
-
-
-def crop_to_aspect_ratio(image, keypoints, bboxes, mask,
-                         aspect_ratio=1.):
-    img_shape = tf.cast(tf.shape(image), tf.float32)
-    img_h, img_w = img_shape[0], img_shape[1]
-    img_aspect_ratio = img_w / img_h
-    crop_aspect_ratio = tf.constant(aspect_ratio, tf.float32)
-
-    def target_height_fn():
-        return tf.to_int32(tf.round(img_w / crop_aspect_ratio))
-
-    crop_h = tf.cond(img_aspect_ratio >= aspect_ratio,
-                     true_fn=lambda: tf.to_int32(img_h),
-                     false_fn=target_height_fn)
-
-    def target_width_fn():
-        return tf.to_int32(tf.round(img_h * crop_aspect_ratio))
-
-    crop_w = tf.cond(img_aspect_ratio <= aspect_ratio,
-                     true_fn=lambda: tf.to_int32(img_w),
-                     false_fn=target_width_fn)
-
-    crop_shape = tf.stack([crop_h, crop_w])
-
-    def _basic_crop():
-        offset_min = tf.constant([0, 0])
-        offset_max = tf.cast(img_shape[:2], tf.int32) - crop_shape + 1
-        return offset_min, offset_max
-
-    def _require_bbox_in_crop():
-        bbox_min, bbox_max = tf.split(bboxes, num_or_size_splits=[2, 2],
-                                      axis=1)
-        bbox_min = tf.reduce_min(bbox_min, 0)
-        bbox_max = tf.reduce_max(bbox_max, 0)
-        bbox_min = tf.cast(tf.round(bbox_min * img_shape[:2]), tf.int32)
-        bbox_max = tf.cast(tf.round(bbox_max * img_shape[:2]), tf.int32)
-        bbox_min = tf.maximum(bbox_min, 0)
-
-        offset_min = tf.maximum(0, bbox_max - crop_shape)
-        offset_max = tf.minimum(
-            tf.cast(img_shape[:2], tf.int32) - crop_shape + 1,
-            bbox_min + 1)
-        offset_min = tf.where(tf.less_equal(offset_max, offset_min),
-                              tf.constant([0, 0]),
-                              offset_min)
-        return offset_min, offset_max
-
-    n_bboxes = tf.shape(bboxes)[0]
-    offset_min, offset_max = tf.cond(tf.greater(n_bboxes, 0),
-                                     true_fn=_require_bbox_in_crop,
-                                     false_fn=_basic_crop)
 
     offset_h = random_int(maxval=offset_max[0], minval=offset_min[0])
     offset_w = random_int(maxval=offset_max[1], minval=offset_min[1])
