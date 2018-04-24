@@ -1,15 +1,14 @@
 import os
 import numpy as np
-from coco import COCO
-from mpii import MPII
-from poseTrack import PoseTrack
-from avaRetail import AVAretail
+from dataset.coco import COCO
+from dataset.mpii import MPII
+from dataset.poseTrack import PoseTrack
+from dataset.avaRetail import AVAretail
 import tensorflow as tf
 import functools
 from utils.dataset_util import (
     normalize_bboxes, normalize_keypoints, random_crop,
-    random_flip_left_right, crop_to_aspect_ratio,
-    keypoints_to_heatmap, resize)
+    random_flip_left_right, keypoints_to_heatmap, resize)
 
 slim_example_decoder = tf.contrib.slim.tfexample_decoder
 

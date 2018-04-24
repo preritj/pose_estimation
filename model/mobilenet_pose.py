@@ -5,7 +5,7 @@ Pose estimation using mobilenet v2
 import tensorflow as tf
 from nets import mobilenet_v2 as mobilenet
 from utils import ops
-from model import Model
+from model.base_model import Model
 
 slim = tf.contrib.slim
 

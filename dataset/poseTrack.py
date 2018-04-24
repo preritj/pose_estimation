@@ -1,7 +1,7 @@
 from collections import defaultdict
 import numpy as np
 from tqdm import tqdm
-from pose_data import PoseData
+from dataset.pose_data import PoseData
 import os
 from PIL import Image
 

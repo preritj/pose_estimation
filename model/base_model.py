@@ -38,21 +38,3 @@ class Model:
         # TODO : add regularization losses
         losses = {'l2_loss': l2_loss}
         return losses
-
-    def make_train_op(self, train_cfg):
-        opt = dict(train_cfg.optimizer)
-        opt_name = opt.pop('name', None)
-        if opt_name == 'adam':
-            opt_params = opt.pop('params', {})
-            opt_params['learning_rate'] = train_cfg.learning_rate
-            solver = tf.train.AdamOptimizer(**opt)
-        else:
-            raise NotImplementedError(
-                "Optimizer {} not yet implemented".format(opt_name))
-
-        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-        with tf.control_dependencies(update_ops):
-            train_op = solver.minimize(loss, global_step=self.global_step)
-            loss_op = [l2_loss]
-
-

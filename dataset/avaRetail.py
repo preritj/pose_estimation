@@ -3,7 +3,7 @@ import numpy as np
 import os
 from PIL import Image
 from tqdm import tqdm
-from pose_data import PoseData
+from dataset.pose_data import PoseData
 
 
 class AVAretail(PoseData):
