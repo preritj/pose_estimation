@@ -82,12 +82,19 @@ sigma: 8
 ###########################################
 --- !train
 is_training: true
+model_dir: './models'
 num_epochs: 0
 learning_rate: 0.001
+learning_rate_decay:
+  decay_steps: 10000
+  decay_rate: 0.95
 
 batch_size: 2
 shuffle: true
 
+train_keypoints:
+  - left_wrist
+  - right_wrist
 
 augmentation:
   flip_left_right: true
@@ -115,12 +122,9 @@ prefetch_size: 32  #512
 # model parameters
 ###########################################
 --- !model
+model_name: mobilenet_pose
 input_shape: [360, 360]
 output_shape: [90, 90]
-
-keypoints:
-  - left_wrist
-  - right_wrist
 
 depth_multiplier: 1.
 min_depth: 8

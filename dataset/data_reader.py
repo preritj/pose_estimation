@@ -267,6 +267,18 @@ class PoseDataReader(object):
 
         # TODO : build padding for bbox batching, for now we remove bbox
         dataset = dataset.map(lambda a, b, _, c: (a, b, c))
-        dataset = dataset.prefetch(train_config.prefetch_size)
-        dataset = dataset.batch(train_config.batch_size)
         return dataset.prefetch(train_config.prefetch_size)
+
+    def get_features_labels_data(self, train_cfg):
+        """returns dataset containing (features, labels)"""
+        dataset = self.read_data(train_cfg)
+        dataset = dataset.batch(train_cfg.batch_size)
+        dataset = dataset.prefetch(train_cfg.prefetch_size)
+
+        def map_fn(images, heatmaps, masks):
+            # append mask to last layer
+            masks = tf.expand_dims(masks, axis=-1)
+            labels = tf.concat([heatmaps, masks], axis=-1)
+            return images, labels
+
+        return dataset.map(map_fn)

@@ -23,6 +23,9 @@ class TrainConfig(yaml.YAMLObject):
     yaml_tag = u'!train'
 
     def __init__(self,
+                 is_training=False,
+                 model_dir=None,
+                 train_keypoints=None,
                  shuffle=True,
                  filenames_shuffle_buffer_size=100,
                  num_parallel_map_calls=2,
@@ -33,9 +36,17 @@ class TrainConfig(yaml.YAMLObject):
                  prefetch_size=512,
                  batch_size=2,
                  learning_rate=0.001,
+                 learning_rate_decay=None,
                  optimizer=None,
                  augmentation=None,
                  preprocess=None):
+        self.is_training = is_training
+        if model_dir is None:
+            model_dir = './models'
+        if train_keypoints is None:
+            train_keypoints = ['nose']
+        self.train_keypoints = train_keypoints
+        self.model_dir = model_dir
         self.shuffle = shuffle
         self.filenames_shuffle_buffer_size = filenames_shuffle_buffer_size
         self.num_parallel_map_calls = num_parallel_map_calls
@@ -46,6 +57,7 @@ class TrainConfig(yaml.YAMLObject):
         self.prefetch_size = prefetch_size
         self.batch_size = batch_size
         self.learning_rate = learning_rate
+        self.learning_rate_decay = learning_rate_decay
         if optimizer is None:
             optimizer = {'name': 'adam'}
         self.optimizer = optimizer
@@ -60,22 +72,20 @@ class ModelConfig(yaml.YAMLObject):
     yaml_tag = u'!model'
 
     def __init__(self,
+                 model_name=None,
                  input_shape=None,
                  output_shape=None,
-                 keypoints=None,
                  depth_multiplier=1.,
                  min_depth=8,
                  skip_layers=None,
                  fpn_depth=96):
+        self.model_name = model_name
         if input_shape is None:
             input_shape = [224, 224]
         if output_shape is None:
             output_shape = input_shape
         self.input_shape = input_shape
         self.output_shape = output_shape
-        if keypoints is None:
-            keypoints = []
-        self.keypoints = keypoints
         self.depth_multiplier = depth_multiplier
         self.min_depth = min_depth
         if skip_layers is None:
