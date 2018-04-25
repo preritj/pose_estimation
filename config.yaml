@@ -102,7 +102,7 @@ augmentation:
   scale_range: [0.5, 2.]
 
 preprocess:
-  image_resize: [360, 360]
+  image_resize: [320, 320]
 
 optimizer:
   name: adam
@@ -123,8 +123,8 @@ prefetch_size: 32  #512
 ###########################################
 --- !model
 model_name: mobilenet_pose
-input_shape: [360, 360]
-output_shape: [90, 90]
+input_shape: [320, 320]
+output_shape: [40, 40]
 
 depth_multiplier: 1.
 min_depth: 8

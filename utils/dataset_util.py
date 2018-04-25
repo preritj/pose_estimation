@@ -21,6 +21,13 @@ def normalize_keypoints(keypoints, img_shape):
     return tf.concat([x / img_w, y / img_h, v], 2)
 
 
+def keypoints_select(img, keypoints, bboxes, mask, keypoints_to_keep):
+    keypoints_subset = tf.gather(keypoints,
+                                 keypoints_to_keep,
+                                 axis=1)
+    return img, keypoints_subset, bboxes, mask
+
+
 def flip_left_right_keypoints(keypoints, flipped_keypoint_indices):
     x, y, v = tf.split(value=keypoints, num_or_size_splits=3, axis=2)
     flipped_keypoints = tf.concat([1. - x, y, v], 2)

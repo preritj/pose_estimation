@@ -8,6 +8,12 @@ import tensorflow as tf
 class Model:
     def __init__(self, model_cfg):
         self.cfg = model_cfg
+        self.check_output_shape()
+
+    @abstractmethod
+    def check_output_shape(self):
+        """Check shape consistency"""
+        raise NotImplementedError("Not yet implemented")
 
     @abstractmethod
     def _preprocess(self, inputs):

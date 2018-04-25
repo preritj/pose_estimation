@@ -8,7 +8,8 @@ import tensorflow as tf
 import functools
 from utils.dataset_util import (
     normalize_bboxes, normalize_keypoints, random_crop,
-    random_flip_left_right, keypoints_to_heatmap, resize)
+    random_flip_left_right, keypoints_to_heatmap,
+    keypoints_select, resize)
 
 slim_example_decoder = tf.contrib.slim.tfexample_decoder
 
@@ -204,15 +205,6 @@ class PoseDataReader(object):
     def preprocess_data(self, dataset, train_cfg):
         preprocess_cfg = train_cfg.preprocess
         img_size = preprocess_cfg['image_resize']
-        # if preprocess_cfg['keep_aspect_ratio']:
-        #     aspect_ratio = img_size[1] / img_size[0]
-        #     crop_to_aspect_ratio_fn = functools.partial(
-        #         crop_to_aspect_ratio, aspect_ratio=aspect_ratio)
-        #     dataset = dataset.map(
-        #         crop_to_aspect_ratio_fn,
-        #         num_parallel_calls=train_cfg.num_parallel_map_calls
-        #     )
-        #     dataset.prefetch(train_cfg.prefetch_size)
         resize_fn = functools.partial(
             resize,
             target_image_size=img_size)
@@ -243,22 +235,31 @@ class PoseDataReader(object):
 
         file_read_func = functools.partial(tf.data.TFRecordDataset,
                                            buffer_size=8 * 1000 * 1000)
-        records_dataset = dataset.apply(
+        dataset = dataset.apply(
             tf.contrib.data.parallel_interleave(
                 file_read_func, cycle_length=train_config.num_readers,
                 block_length=train_config.read_block_length, sloppy=True))
         if train_config.shuffle:
-            records_dataset.shuffle(train_config.shuffle_buffer_size)
+            dataset = dataset.shuffle(train_config.shuffle_buffer_size)
 
         decode_fn = functools.partial(
             decoder.decode, items=['image', 'keypoints', 'bbox', 'mask'])
-        dataset = records_dataset.map(
+        dataset = dataset.map(
             decode_fn, num_parallel_calls=train_config.num_parallel_map_calls)
+
+        train_keypoints = [self.data_cfg.keypoints[kp_name]
+                           for kp_name in train_config.train_keypoints]
+        num_keypoints = len(train_keypoints)
+        kp_subset_fn = functools.partial(
+            keypoints_select, keypoints_to_keep=train_keypoints)
+
         dataset = self.augment_data(dataset, train_config)
 
         dataset = self.preprocess_data(dataset, train_config)
         heatmap_fn = functools.partial(
-            keypoints_to_heatmap, sigma=self.data_cfg.sigma)
+            keypoints_to_heatmap,
+            num_keypoints=num_keypoints,
+            sigma=self.data_cfg.sigma)
         dataset = dataset.map(
             heatmap_fn,
             num_parallel_calls=train_config.num_parallel_map_calls
@@ -277,8 +278,11 @@ class PoseDataReader(object):
 
         def map_fn(images, heatmaps, masks):
             # append mask to last layer
+            heatmaps = tf.transpose(heatmaps, [0, 2, 3, 1])
             masks = tf.expand_dims(masks, axis=-1)
             labels = tf.concat([heatmaps, masks], axis=-1)
             return images, labels
 
-        return dataset.map(map_fn)
+        dataset = dataset.map(
+            map_fn, num_parallel_calls=train_cfg.num_parallel_map_calls)
+        return dataset
