@@ -246,12 +246,17 @@ class PoseDataReader(object):
             decoder.decode, items=['image', 'keypoints', 'bbox', 'mask'])
         dataset = dataset.map(
             decode_fn, num_parallel_calls=train_config.num_parallel_map_calls)
+        dataset = dataset.prefetch(train_config.prefetch_size)
 
         train_keypoints = [self.data_cfg.keypoints[kp_name]
                            for kp_name in train_config.train_keypoints]
         num_keypoints = len(train_keypoints)
         kp_subset_fn = functools.partial(
             keypoints_select, keypoints_to_keep=train_keypoints)
+        dataset = dataset.map(
+            kp_subset_fn,
+            num_parallel_calls=train_config.num_parallel_map_calls)
+        dataset = dataset.prefetch(train_config.prefetch_size)
 
         dataset = self.augment_data(dataset, train_config)
 

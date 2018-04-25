@@ -114,12 +114,12 @@ def get_model_fn(model_cfg):
         loss = None
         train_op = None
         eval_metric_ops = {}
-        labels = tf.image.resize_bilinear(
-            labels, size=model_cfg.output_shape)
-        heatmaps = labels[:, :, :, :-1]
-        masks = tf.squeeze(labels[:, :, :, -1])
-        labels = heatmaps
         if mode != tf.estimator.ModeKeys.PREDICT:
+            labels = tf.image.resize_bilinear(
+                labels, size=model_cfg.output_shape)
+            heatmaps = labels[:, :, :, :-1]
+            masks = tf.squeeze(labels[:, :, :, -1])
+            labels = heatmaps
             ground_truth = {'heatmaps': heatmaps,
                             'masks': masks}
             loss = model.losses(predictions_dict, ground_truth)
