@@ -55,7 +55,7 @@ class MobilenetPose(Model):
     def _decoder(self, image_features, is_training=False, scope=None):
         """Builds decoder
         Args:
-          image_features: list of image feature tensors to be used for
+          image_features: dict of image feature tensors to be used for
             skip connections
           scope: A scope name to wrap this op under.
         Returns:

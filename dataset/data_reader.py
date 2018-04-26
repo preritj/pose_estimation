@@ -169,11 +169,10 @@ class PoseDataReader(object):
         preprocess_cfg = train_cfg.preprocess
         img_size = preprocess_cfg['image_resize']
         if aug_cfg['flip_left_right']:
-            kp_dict = self.data_cfg.keypoints
-            reverse_dict = {v: k for k, v in kp_dict.items()}
+            kp_dict = {kp_name: i for i, kp_name in
+                       enumerate(train_cfg.train_keypoints)}
             flipped_kp_indices = []
-            for i in range(len(reverse_dict)):
-                kp_name = reverse_dict[i]
+            for kp_name in train_cfg.train_keypoints:
                 if kp_name.startswith('left'):
                     flipped_kp_name = 'right' + kp_name.split('left')[1]
                     flipped_kp_indices.append(kp_dict[flipped_kp_name])
@@ -181,7 +180,7 @@ class PoseDataReader(object):
                     flipped_kp_name = 'left' + kp_name.split('right')[1]
                     flipped_kp_indices.append(kp_dict[flipped_kp_name])
                 else:
-                    flipped_kp_indices.append(i)
+                    flipped_kp_indices.append(kp_dict[kp_name])
             random_flip_left_right_fn = functools.partial(
                 random_flip_left_right,
                 flipped_keypoint_indices=flipped_kp_indices)

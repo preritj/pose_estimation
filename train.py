@@ -32,18 +32,18 @@ def get_optimizer_fn(optimizer_cfg):
     return optimizer_fn
 
 
-def get_train_op(loss, params):
+def get_train_op(loss, train_cfg):
     """Get the training Op.
     Args:
          loss (Tensor): Scalar Tensor that represents the loss function.
-         params (HParams): Hyperparameters
+         train_cfg: cfg parameters
            (needs to have `learning_rate` and 'optimizer')
     Returns:
         Training Op
     """
-    optimizer_cfg = params.optimizer
+    optimizer_cfg = train_cfg.optimizer
 
-    lr_decay_params = params.learning_rate_decay
+    lr_decay_params = train_cfg.learning_rate_decay
     if lr_decay_params is not None:
         lr_decay_fn = functools.partial(
             tf.train.exponential_decay,
@@ -57,8 +57,8 @@ def get_train_op(loss, params):
     return tf.contrib.layers.optimize_loss(
         loss=loss,
         global_step=tf.train.get_global_step(),
-        optimizer=get_optimizer_fn(optimizer_cfg),
-        learning_rate=params.learning_rate,
+        optimizer=tf.train.AdamOptimizer,  # get_optimizer_fn(optimizer_cfg),
+        learning_rate=train_cfg.learning_rate,
         learning_rate_decay_fn=lr_decay_fn
     )
 
@@ -79,20 +79,12 @@ def get_eval_metric_ops(labels, predictions):
     }
 
 
-def get_model_fn(model_cfg):
+def get_model_fn(train_cfg):
     """Return the model_fn.
     Args:
-        model_cfg :
-        run_config (RunConfig): Configuration for Estimator run.
+        train_cfg: .
     """
     # TODO: add multi-GPU training and CPU/GPU optimizations
-
-    model_name = model_cfg.model_name
-    print("Using model ", model_name)
-    if model_name == 'mobilenet_pose':
-        model = MobilenetPose(model_cfg)
-    else:
-        NotImplementedError("{} not implemented".format(model_name))
 
     def model_fn(features, labels, mode, params):
         """Model function used in the estimator.
@@ -105,18 +97,31 @@ def get_model_fn(model_cfg):
         Returns:
             (EstimatorSpec): Model to be run by Estimator.
         """
+        model = None
+        model_name = params.model_name
+        print("Using model ", model_name)
+        if model_name == 'mobilenet_pose':
+            model = MobilenetPose(params)
+        else:
+            NotImplementedError("{} not implemented".format(model_name))
+
         is_training = mode == tf.estimator.ModeKeys.TRAIN
         # Define model's architecture
         inputs = {'images': features}
         predictions_dict = model.predict(inputs, is_training=is_training)
         predictions = predictions_dict['heatmaps']
+        summary_out = tf.expand_dims(
+            tf.zeros_like(predictions[:, :, :, 0]), axis=-1)
+        summary_out = tf.concat([summary_out, predictions], -1)
+        tf.summary.image('image', features, max_outputs=3)
+        tf.summary.image('heatmap', summary_out, max_outputs=3)
         # Loss, training and eval operations are not needed during inference.
         loss = None
         train_op = None
         eval_metric_ops = {}
         if mode != tf.estimator.ModeKeys.PREDICT:
             labels = tf.image.resize_bilinear(
-                labels, size=model_cfg.output_shape)
+                labels, size=params.output_shape)
             heatmaps = labels[:, :, :, :-1]
             masks = tf.squeeze(labels[:, :, :, -1])
             labels = heatmaps
@@ -124,8 +129,8 @@ def get_model_fn(model_cfg):
                             'masks': masks}
             loss = model.losses(predictions_dict, ground_truth)
             loss = loss['l2_loss']
-            train_op = get_train_op(loss, params)
-            eval_metric_ops = get_eval_metric_ops(labels, predictions)
+            train_op = get_train_op(loss, train_cfg)
+            eval_metric_ops = None  # get_eval_metric_ops(labels, predictions)
         return tf.estimator.EstimatorSpec(
             mode=mode,
             predictions=predictions,
@@ -152,42 +157,42 @@ def input_fn(data_reader, train_cfg):
 
 
 # Define and run experiment
-def run_experiment(config_file):
+def run_experiment(cfg_file):
     """Run the training experiment."""
     # Define model parameters
-    cfg = parse_config(config_file)
+    cfg = parse_config(cfg_file)
     data_cfg = cfg['data_config']
     train_cfg = cfg['train_config']
     model_cfg = cfg['model_config']
 
     hparams = tf.contrib.training.HParams(
-        **data_cfg.__dict__,
-        **train_cfg.__dict__,
         **model_cfg.__dict__,
         num_keypoints=len(train_cfg.train_keypoints))
 
     session_config = tf.ConfigProto(
-        allow_soft_placement=True,
-        log_device_placement=False,
-        gpu_options=tf.GPUOptions(
-            force_gpu_compatible=True,
-            allow_growth=True)
+        allow_soft_placement=True  # ,
+        # log_device_placement=False,
+        # gpu_options=tf.GPUOptions(
+        #     force_gpu_compatible=True,
+        #     allow_growth=True)
     )
 
-    if not os.path.exists(hparams.model_dir):
+    if not os.path.exists(train_cfg.model_dir):
         os.makedirs(train_cfg.model_dir)
 
     model_path = os.path.join(
         train_cfg.model_dir, model_cfg.model_name)
     if not os.path.exists(model_path):
         os.makedirs(model_path)
+    hparams.model_dir = model_path
+
     run_config = tf.contrib.learn.RunConfig(
         model_dir=train_cfg.model_dir,
         session_config=session_config
     )
 
     estimator = tf.estimator.Estimator(
-        model_fn=get_model_fn(hparams),
+        model_fn=get_model_fn(train_cfg),
         params=hparams,  # HParams
         config=run_config  # RunConfig
     )

@@ -110,6 +110,8 @@ def random_crop(image, keypoints, bboxes, mask,
         tf.greater(n_bboxes, 0),
         true_fn=lambda: tf.random_shuffle(bboxes)[0],
         false_fn=lambda: tf.constant([0., 0., 1., 1.]))
+    bbox_area = ((random_bbox[2] - random_bbox[0])
+                 * (random_bbox[3] - random_bbox[1]))
     img_aspect_ratio = img_w / img_h
     aspect_ratio = 1. * crop_size[1] / crop_size[0]
     crop_aspect_ratio = tf.constant(aspect_ratio, tf.float32)
@@ -131,12 +133,17 @@ def random_crop(image, keypoints, bboxes, mask,
     max_crop_shape = tf.stack([crop_h, crop_w])
 
     crop_area = 1. * crop_size[0] * crop_size[1]
-    scale_ratio = tf.sqrt(img_h * img_w / crop_area)
+    # scale_ratio = tf.sqrt(img_h * img_w / crop_area)
+    # crop_size = tf.constant(list(crop_size), tf.float32)
+    # scale_min = tf.maximum(scale_range[0], 2. * scale_ratio)
+    # scale_min = tf.minimum(scale_min, 0.9)
+    # scale_max = tf.minimum(scale_range[1], 10. * scale_ratio)
+    # scale_max = tf.maximum(scale_max, 1.1)
+    scale_ratio = tf.sqrt(bbox_area * img_h * img_w / crop_area)
+
     crop_size = tf.constant(list(crop_size), tf.float32)
-    scale_min = tf.maximum(scale_range[0], 2. * scale_ratio)
-    scale_min = tf.minimum(scale_min, 0.9)
-    scale_max = tf.minimum(scale_range[1], 10. * scale_ratio)
-    scale_max = tf.maximum(scale_max, 1.1)
+    scale_min = 1.5 * scale_ratio
+    scale_max = 4. * scale_ratio
     size_min = tf.minimum(max_crop_shape - 1,
                           tf.to_int32(scale_min * crop_size))
     size_max = tf.minimum(max_crop_shape,

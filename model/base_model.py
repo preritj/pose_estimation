@@ -39,8 +39,10 @@ class Model:
         heatmaps_gt = ground_truth['heatmaps']
         weights = ground_truth['masks']
         l2_loss = tf.losses.mean_squared_error(
-            heatmaps_gt, heatmaps_pred, weights=weights,
-            reduction=tf.losses.Reduction.SUM)
+            heatmaps_gt, heatmaps_pred,
+            reduction=tf.losses.Reduction.NONE)
+        l2_loss = weights * tf.reduce_mean(l2_loss, axis=-1)
+        l2_loss = tf.reduce_mean(l2_loss)
         # TODO : add regularization losses
         losses = {'l2_loss': l2_loss}
         return losses

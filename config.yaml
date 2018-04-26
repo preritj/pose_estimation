@@ -89,7 +89,7 @@ learning_rate_decay:
   decay_steps: 10000
   decay_rate: 0.95
 
-batch_size: 2
+batch_size: 32
 shuffle: true
 
 train_keypoints:
