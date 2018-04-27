@@ -16,21 +16,30 @@ class Model:
         raise NotImplementedError("Not yet implemented")
 
     @abstractmethod
-    def _preprocess(self, inputs):
+    def preprocess(self, inputs):
         """Image preprocessing"""
         raise NotImplementedError("Not yet implemented")
 
     @abstractmethod
-    def _build_net(self, preprocessed_inputs, is_training=False):
-        """Builds network and returns heatmaps"""
+    def build_net(self, preprocessed_inputs, is_training=False):
+        """Builds network and returns heatmaps and fpn features"""
+        raise NotImplementedError("Not yet implemented")
+
+    @abstractmethod
+    def bbox_clf_reg_net(self, fpn_features, is_training=False):
+        """Builds bbox classifier and regressor"""
         raise NotImplementedError("Not yet implemented")
 
     def predict(self, inputs, is_training=False):
         images = inputs['images']
-        preprocessed_inputs = self._preprocess(images)
-        heatmaps = self._build_net(preprocessed_inputs,
-                                   is_training=is_training)
-        prediction = {'heatmaps': heatmaps}
+        preprocessed_inputs = self.preprocess(images)
+        heatmaps, fpn_features = self.build_net(
+            preprocessed_inputs, is_training=is_training)
+        bbox_clf_logits, bbox_regs = self.bbox_clf_reg_net(
+            fpn_features, is_training)
+        prediction = {'heatmaps': heatmaps,
+                      'bbox_clf_logits': bbox_clf_logits,
+                      'bbox_regs': bbox_regs}
         return prediction
 
     @staticmethod

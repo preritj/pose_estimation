@@ -33,16 +33,16 @@ class MobilenetPose(Model):
             "output_shape inconsistent with model output shape"
         return h / 8, w / 8, self._num_keypoints
 
-    def _preprocess(self, inputs):
+    def preprocess(self, inputs):
         """Image preprocessing"""
         return (2.0 / 255.0) * inputs - 1.0
 
-    def _build_net(self, preprocessed_inputs, is_training=False):
+    def build_net(self, preprocessed_inputs, is_training=False):
         image_features = self._encoder(preprocessed_inputs)
         out = self._decoder(image_features, is_training)
         return out
 
-    def _encoder(self, preprocessed_inputs, is_training=False, scope=None):
+    def encoder(self, preprocessed_inputs, is_training=False, scope=None):
         with tf.variable_scope(scope, 'encoder'):
             with slim.arg_scope(mobilenet_v2_arg_scope(
                 is_training=is_training)
@@ -55,11 +55,12 @@ class MobilenetPose(Model):
                     scope=scope)
         return {l: image_features[l] for l in self._skip_layers}
 
-    def _decoder(self, image_features, is_training=False, scope=None):
+    def decoder(self, image_features, is_training=False, scope=None):
         """Builds decoder
         Args:
           image_features: dict of image feature tensors to be used for
             skip connections
+          is_training (bool) : true if training mode
           scope: A scope name to wrap this op under.
         Returns:
           feature_maps: an OrderedDict mapping keys (feature map names) to
@@ -94,14 +95,25 @@ class MobilenetPose(Model):
                 net = slim.conv2d(net, self._num_keypoints, [1, 1],
                                   activation_fn=None,
                                   scope='heatmap')
-        return net
+        return net, fpn_layers
 
-    def _bbox_clf(self, fpn_features, is_training=False, scope=None):
+    def bbox_clf_reg_net(self, fpn_features, is_training=False, scope=None):
+        """Builds bbox classifier and regressor"""
+        num_fpn_layers = len(self.cfg.anchor_sizes)
+        assert num_fpn_layers == len(fpn_features), \
+            "Number of anchor sizes must match number of fpn layers"
+        bbox_clf_logits = self.bbox_clf_net(
+            fpn_features, is_training, scope)
+        bbox_regs = self.bbox_reg_net(fpn_features, is_training, scope)
+        return bbox_clf_logits, bbox_regs
+
+    def bbox_clf_net(self, fpn_features, is_training=False, scope=None):
         """Builds bbox classifier
         Args:
           fpn_features : dictionary of FPN features with keys as layer name
             and values as features (all features must have same depth)
             Features have shape [N, h_i, w_i, c_i]
+          is_training (bool) : true if training mode
           scope: A scope name to wrap this op under.
         Returns:
             bbox clf logits : A list of tensors where each tensor in the list
@@ -110,10 +122,6 @@ class MobilenetPose(Model):
             where K is the number of classes
             """
         bbox_clf_logits = []
-        num_fpn_layers = len(self.cfg.anchor_sizes)
-        assert num_fpn_layers == len(fpn_features), \
-            "Number of anchor sizes must match number of fpn layers"
-
         with tf.variable_scope(scope, 'bbox_clf'):
             with slim.arg_scope(mobilenet_v2_arg_scope(
                     is_training=is_training)):
@@ -131,12 +139,13 @@ class MobilenetPose(Model):
                     bbox_clf_logits[0:0] = net  # build top-down
         return bbox_clf_logits
 
-    def _bbox_reg(self, fpn_features, is_training=False, scope=None):
+    def bbox_reg_net(self, fpn_features, is_training=False, scope=None):
         """Builds bbox regressor
         Args:
           fpn_features : dictionary of FPN features with keys as layer name
             and values as features (all features must have same depth)
             Features have shape [N, h_i, w_i, c_i]
+          is_training (bool) : true if training mode
           scope: A scope name to wrap this op under.
         Returns:
             bbox regressions : A list of tensors where each tensor in the list
