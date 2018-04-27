@@ -1,7 +1,7 @@
 """
 Pose estimation using mobilenet v2
 """
-
+import collections
 import tensorflow as tf
 from nets.mobilenet_v2 import (
     mobilenet_v2_base, mobilenet_v2_arg_scope,
@@ -14,11 +14,14 @@ slim = tf.contrib.slim
 
 class MobilenetPose(Model):
     def __init__(self, cfg):
+        self._num_classes = 2
         self._depth_multiplier = cfg.depth_multiplier
         self._min_depth = cfg.min_depth
         self._skip_layers = cfg.skip_layers
         self._fpn_depth = cfg.fpn_depth
         self._num_keypoints = cfg.num_keypoints
+        self._boxes_per_anchor = (len(self.cfg.anchor_scales) *
+                                  len(self.cfg.anchor_ratios))
         super().__init__(cfg)
 
     def check_output_shape(self):
@@ -67,7 +70,7 @@ class MobilenetPose(Model):
                     is_training=is_training)
             ):
                 n_skips = len(self._skip_layers)
-                fpn_layers = {}
+                fpn_layers = collections.OrderedDict()
                 last_layer = self._skip_layers[-1]
                 net = image_features[last_layer]
                 for i in range(n_skips - 2, -1, -1):
@@ -92,3 +95,69 @@ class MobilenetPose(Model):
                                   activation_fn=None,
                                   scope='heatmap')
         return net
+
+    def _bbox_clf(self, fpn_features, is_training=False, scope=None):
+        """Builds bbox classifier
+        Args:
+          fpn_features : dictionary of FPN features with keys as layer name
+            and values as features (all features must have same depth)
+            Features have shape [N, h_i, w_i, c_i]
+          scope: A scope name to wrap this op under.
+        Returns:
+            bbox clf logits : A list of tensors where each tensor in the list
+            corresponds to an fpn layer in the input fpn_features dictionary.
+            Each tensor has shape [N, h_i, w_i, K * (num of boxes per anchor)]
+            where K is the number of classes
+            """
+        bbox_clf_logits = []
+        num_fpn_layers = len(self.cfg.anchor_sizes)
+        assert num_fpn_layers == len(fpn_features), \
+            "Number of anchor sizes must match number of fpn layers"
+
+        with tf.variable_scope(scope, 'bbox_clf'):
+            with slim.arg_scope(mobilenet_v2_arg_scope(
+                    is_training=is_training)):
+                for i, fpn_name in enumerate(fpn_features.keys()):
+                    net = fpn_features[fpn_name]
+                    net = inverted_residual_bottleneck(
+                        net,
+                        depth=64,
+                        stride=1,
+                        expand_ratio=6,
+                        scope=fpn_name)
+                    net = slim.conv2d(
+                        net, self._num_classes * self._boxes_per_anchor,
+                        [1, 1], activation_fn=None, scope='bbox_clf_logits')
+                    bbox_clf_logits[0:0] = net  # build top-down
+        return bbox_clf_logits
+
+    def _bbox_reg(self, fpn_features, is_training=False, scope=None):
+        """Builds bbox regressor
+        Args:
+          fpn_features : dictionary of FPN features with keys as layer name
+            and values as features (all features must have same depth)
+            Features have shape [N, h_i, w_i, c_i]
+          scope: A scope name to wrap this op under.
+        Returns:
+            bbox regressions : A list of tensors where each tensor in the list
+            corresponds to an fpn layer in the input fpn_features dictionary.
+            Each tensor has shape [N, h_i, w_i, 4 * (num of boxes per anchor)]
+            """
+        bbox_regs = []
+        with tf.variable_scope(scope, 'bbox_reg'):
+            with slim.arg_scope(mobilenet_v2_arg_scope(
+                    is_training=is_training)):
+                for i, fpn_name in enumerate(fpn_features.keys()):
+                    net = fpn_features[fpn_name]
+                    net = inverted_residual_bottleneck(
+                        net,
+                        depth=64,
+                        stride=1,
+                        expand_ratio=6,
+                        scope=fpn_name)
+                    net = slim.conv2d(
+                        net, 4 * self._boxes_per_anchor, [1, 1],
+                        activation_fn=None, scope='bbox_regs')
+                    bbox_regs[0:0] = net  # build top-down
+        return bbox_regs
+

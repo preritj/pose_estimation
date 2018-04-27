@@ -191,7 +191,9 @@ class PoseDataReader(object):
             dataset = dataset.prefetch(train_cfg.prefetch_size)
         random_crop_fn = functools.partial(
             random_crop,
-            crop_size=img_size)
+            crop_size=img_size,
+            scale_range=aug_cfg['scale_range']
+        )
         if aug_cfg['random_crop']:
             dataset = dataset.map(
                 random_crop_fn,
