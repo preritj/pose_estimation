@@ -37,19 +37,21 @@ def iou(boxes1, boxes2):
 def get_matches(gt_bboxes, pred_bboxes,
                 unmatched_threshold=0.4,
                 matched_threshold=0.7,
-                force_match_for_gt_bbox=True):
-    """Returns indices of gt_bboxes assigned to pred_bboxes (or anchors)
-      index of -1 means no gt-bbox was assigned because iou was
-        below the unmatched-threshold
-      index of -2 means no gt-bbox was assigned because iou was
-        between unmatched and matched-thresholds"""
+                force_match_for_gt_bbox=True,
+                scale_factors=None):
+
     num_preds = tf.shape(pred_bboxes)[0]
 
     def _gt_bboxes_absent():
+        """returns -1 for all indices since no gt-bbox present"""
         return -1 * tf.ones([num_preds], dtype=tf.int32)
 
     def _gt_bboxes_present():
-        """Assign at least one ....."""
+        """Returns indices of gt_bboxes assigned to pred_bboxes (or anchors)
+          index of -1 means no gt-bbox was assigned because iou was
+            below the unmatched-threshold
+          index of -2 means no gt-bbox was assigned because iou was
+            between unmatched and matched-thresholds"""
         iou_matrix = iou(gt_bboxes, pred_bboxes)
         # assign bbox to each prediction
         matches = tf.argmax(iou_matrix, 0, output_type=tf.int32)
@@ -78,11 +80,22 @@ def get_matches(gt_bboxes, pred_bboxes,
                                force_matches, matches)
         return matches
 
-    return tf.cond(
+    matched_indices = tf.cond(
         tf.equal(tf.shape(gt_bboxes)[0], 0),
         true_fn=_gt_bboxes_absent,
-        false_fn=_gt_bboxes_present
-    )
+        false_fn=_gt_bboxes_present)
+
+    gather_indices = matched_indices + 2
+    dummy_bboxes = tf.zeros([2, 4])
+    bboxes = tf.concat([dummy_bboxes, gt_bboxes], axis=0)
+    matched_gt_bboxes = tf.gather(bboxes, gather_indices)
+    matched_regs = bbox_encode(
+        matched_gt_bboxes, pred_bboxes, scale_factors)
+    matched_classes = tf.cast(
+        tf.greater(matched_indices, -1), tf.int32)
+    matched_weights = tf.cast(
+        tf.greater(matched_indices, -2), tf.float32)
+    return matched_classes, matched_regs, matched_weights
 
 
 def bbox_encode(bboxes, anchors, scale_factors=None):
