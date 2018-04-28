@@ -276,19 +276,30 @@ class PoseDataReader(object):
         dataset = dataset.map(lambda a, b, _, c: (a, b, c))
         return dataset.prefetch(train_config.prefetch_size)
 
-    def get_features_labels_data(self, train_cfg):
+    def get_features_labels_data(self, train_cfg, model_cfg):
         """returns dataset containing (features, labels)"""
         dataset = self.read_data(train_cfg)
-        dataset = dataset.batch(train_cfg.batch_size)
-        dataset = dataset.prefetch(train_cfg.prefetch_size)
 
         def map_fn(images, heatmaps, masks):
-            # append mask to last layer
-            heatmaps = tf.transpose(heatmaps, [0, 2, 3, 1])
+            features = {'images': images}
+            heatmaps = tf.image.resize_bilinear(
+                heatmaps, size=model_cfg.output_shape)
             masks = tf.expand_dims(masks, axis=-1)
-            labels = tf.concat([heatmaps, masks], axis=-1)
-            return images, labels
+            masks = tf.image.resize_bilinear(
+                masks, size=model_cfg.output_shape)
+            masks = tf.squeeze(masks)
+            labels = {'heatmaps': heatmaps,
+                      'masks': masks}
+            return features, labels
+            # # append mask to last layer
+            # heatmaps = tf.transpose(heatmaps, [0, 2, 3, 1])
+            # masks = tf.expand_dims(masks, axis=-1)
+            # labels = tf.concat([heatmaps, masks], axis=-1)
+            # return images, labels
 
         dataset = dataset.map(
             map_fn, num_parallel_calls=train_cfg.num_parallel_map_calls)
+        dataset = dataset.prefetch(train_cfg.prefetch_size)
+        dataset = dataset.batch(train_cfg.batch_size)
+        dataset = dataset.prefetch(train_cfg.prefetch_size)
         return dataset

@@ -107,12 +107,13 @@ def get_model_fn(train_cfg):
 
         is_training = mode == tf.estimator.ModeKeys.TRAIN
         # Define model's architecture
-        inputs = {'images': features}
-        predictions_dict = model.predict(inputs, is_training=is_training)
-        predictions = predictions_dict['heatmaps']
+        # inputs = {'images': features}
+        # predictions = model.predict(inputs, is_training=is_training)
+        predictions = model.predict(features, is_training=is_training)
+        heatmaps = predictions['heatmaps']
         summary_out = tf.expand_dims(
-            tf.zeros_like(predictions[:, :, :, 0]), axis=-1)
-        summary_out = tf.concat([summary_out, predictions], -1)
+            tf.zeros_like(heatmaps[:, :, :, 0]), axis=-1)
+        summary_out = tf.concat([summary_out, heatmaps], -1)
         tf.summary.image('image', features, max_outputs=3)
         tf.summary.image('heatmap', summary_out, max_outputs=3)
         # Loss, training and eval operations are not needed during inference.
@@ -120,14 +121,15 @@ def get_model_fn(train_cfg):
         train_op = None
         eval_metric_ops = {}
         if mode != tf.estimator.ModeKeys.PREDICT:
-            labels = tf.image.resize_bilinear(
-                labels, size=params.output_shape)
-            heatmaps = labels[:, :, :, :-1]
-            masks = tf.squeeze(labels[:, :, :, -1])
-            labels = heatmaps
-            ground_truth = {'heatmaps': heatmaps,
-                            'masks': masks}
-            loss = model.losses(predictions_dict, ground_truth)
+            # labels = tf.image.resize_bilinear(
+            #     labels, size=params.output_shape)
+            # heatmaps = labels[:, :, :, :-1]
+            # masks = tf.squeeze(labels[:, :, :, -1])
+            # labels = heatmaps
+            # ground_truth = {'heatmaps': heatmaps,
+            #                 'masks': masks}
+            ground_truth = labels
+            loss = model.losses(predictions, ground_truth)
             loss = loss['l2_loss']
             train_op = get_train_op(loss, train_cfg)
             eval_metric_ops = None  # get_eval_metric_ops(labels, predictions)
@@ -142,17 +144,19 @@ def get_model_fn(train_cfg):
     return model_fn
 
 
-def input_fn(data_reader, train_cfg):
+def input_fn(data_reader, train_cfg, model_cfg):
     """Create input graph for model.
     Args:
       data_reader: PoseDataReader instance
       train_cfg: training parameters
+      model_cfg: model parameters
     Returns:
-      features, labels
+      dataset
     """
     # TODO : add multi-gpu training
     with tf.device('/cpu:0'):
-        dataset = data_reader.get_features_labels_data(train_cfg)
+        dataset = data_reader.get_features_labels_data(
+            train_cfg, model_cfg)
         return dataset
 
 
@@ -201,7 +205,8 @@ def run_experiment(cfg_file):
     train_input_fn = functools.partial(
         input_fn,
         data_reader=data_reader,
-        train_cfg=train_cfg)
+        train_cfg=train_cfg,
+        model_cfg=model_cfg)
 
     estimator.train(input_fn=train_input_fn)
 
