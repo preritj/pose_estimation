@@ -66,23 +66,21 @@ def get_matches(gt_bboxes, pred_bboxes,
                    - 2 * between_thresholds)
 
         if force_match_for_gt_bbox:
-            best_pred_match = tf.argmax(iou_matrix, 0,
-                                        output_type=tf.int32)
+            best_pred_matches = tf.argmax(iou_matrix, 0,
+                                          output_type=tf.int32)
             best_pred_match_matrix = tf.one_hot(
-                best_pred_match, depth=num_preds)
-            force_match_row_ids = tf.argmax(
+                best_pred_matches, depth=num_preds)
+            force_matches = tf.argmax(
                 best_pred_match_matrix, 0, output_type=tf.int32)
-            force_match_column_mask = tf.cast(
-                tf.reduce_max(force_match_column_indicators, 0), tf.bool)
-            final_matches = tf.where(force_match_column_mask,
-                                     force_match_row_ids, matches)
-
-
+            force_matches_mask = tf.cast(
+                tf.reduce_max(best_pred_match_matrix, 0), tf.bool)
+            matches = tf.where(force_matches_mask,
+                               force_matches, matches)
         return matches
 
     return tf.cond(
         tf.equal(tf.shape(gt_bboxes)[0], 0),
-        true_fn=lambda: _gt_bboxes_absent,
+        true_fn=_gt_bboxes_absent,
         false_fn=_gt_bboxes_present
     )
 
