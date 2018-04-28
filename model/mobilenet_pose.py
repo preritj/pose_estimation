@@ -38,8 +38,8 @@ class MobilenetPose(Model):
         return (2.0 / 255.0) * inputs - 1.0
 
     def build_net(self, preprocessed_inputs, is_training=False):
-        image_features = self._encoder(preprocessed_inputs)
-        out = self._decoder(image_features, is_training)
+        image_features = self.encoder(preprocessed_inputs)
+        out = self.decoder(image_features, is_training)
         return out
 
     def encoder(self, preprocessed_inputs, is_training=False, scope=None):
