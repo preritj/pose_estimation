@@ -239,9 +239,38 @@ def _get_heatmap(keypoints, sigma, shape):
     return tf.stack(heatmaps)
 
 
-def keypoints_to_heatmap(image, keypoints, bboxes, mask,
-                         num_keypoints=15, sigma=8.):
+def keypoints_to_heatmap_v1(image, keypoints, bboxes, mask,
+                            num_keypoints=15, sigma=8.):
+    """CMU version of generating heatmaps"""
     shape = tf.cast(tf.shape(image)[:2], tf.int64)
     keypoints.set_shape([None, num_keypoints, 3])
     heatmap = _get_heatmap(keypoints, sigma, shape)
+    return image, heatmap, bboxes, mask
+
+
+def keypoints_to_heatmap(image, keypoints, bboxes, mask,
+                         num_keypoints=15,
+                         grid_shape=(28, 28)):
+    """Mask-rcnn method of generating heatmaps"""
+    grid_shape_ = tf.constant(list(grid_shape), tf.int64)
+    keypoints.set_shape([None, num_keypoints, 3])
+    keypoints_ = tf.reshape(keypoints, [-1, 3])
+    keypoints_x, keypoints_y, keypoints_vis = tf.split(
+        keypoints_, num_or_size_splits=3, axis=1)
+    x_indices = tf.floor(
+        keypoints_x * tf.to_float(grid_shape_[1]))
+    y_indices = tf.floor(
+        keypoints_y * tf.to_float(grid_shape_[0]))
+    indices = tf.to_int64(tf.concat([y_indices, x_indices],
+                                    axis=1))
+    keypoints_vis = tf.squeeze(keypoints_vis, [1])
+    values = tf.cast(tf.greater(keypoints_vis, 0.), tf.int32)
+    heatmap = tf.SparseTensor(
+        indices=indices,
+        values=values,
+        dense_shape=grid_shape_)
+    shape = [-1, 15, grid_shape[0], grid_shape[1]]
+    heatmap = tf.sparse_reshape(heatmap, shape=shape)
+    heatmap = tf.sparse_reduce_max(heatmap, axis=0)
+    heatmap = tf.sparse_transpose(heatmap, [1, 2, 0])
     return image, heatmap, bboxes, mask
