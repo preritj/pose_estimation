@@ -89,9 +89,8 @@ def get_matches(gt_bboxes, pred_bboxes,
     dummy_bboxes = tf.zeros([2, 4])
     bboxes = tf.concat([dummy_bboxes, gt_bboxes], axis=0)
     matched_gt_bboxes = tf.gather(bboxes, gather_indices)
-    matched_regs = matched_gt_bboxes
-    #matched_regs = bbox_encode(
-    #    matched_gt_bboxes, pred_bboxes, scale_factors)
+    matched_regs = bbox_encode(
+        matched_gt_bboxes, pred_bboxes, scale_factors)
     matched_classes = tf.cast(
         tf.greater(matched_indices, -1), tf.int32)
     matched_weights = tf.cast(
@@ -147,18 +146,18 @@ def bbox_decode(bboxes, anchors, scale_factors=None):
 
     # Convert anchors to the center coordinate representation.
     yx_center_a, hw_a = _get_center_and_sizes(anchors)
-    yx_center, hw = _get_center_and_sizes(bboxes)
-    # Avoid NaN in division and log below.
-    hw_a += EPSILON
-    hw += EPSILON
+    t_yx, t_hw = bboxes[:, :2], bboxes[:, 2:]
 
-    t_yx = (yx_center - yx_center_a) / hw_a
-    t_hw = tf.log(hw / hw_a)
-    # Scales location targets as used in paper for joint training.
     if scale_factors is not None:
-        t_yx *= scale_factors[0]
-        t_hw *= scale_factors[1]
-    return tf.concat([t_yx, t_hw], axis=-1)
+        t_yx /= scale_factors[0]
+        t_hw /= scale_factors[1]
+
+    hw = tf.exp(t_hw) * hw_a
+    yx_center = t_yx * hw_a + yx_center_a
+    yx_min = yx_center - 0.5 * hw
+    yx_max = yx_center + 0.5 * hw
+
+    return tf.concat([yx_min, yx_max], axis=-1)
 
 
 def generate_anchors(grid_shape, base_anchor_size, stride,
@@ -187,9 +186,9 @@ def generate_anchors(grid_shape, base_anchor_size, stride,
     grid_height, grid_width = grid_shape[0], grid_shape[1]
     heights = heights / tf.to_float(grid_height * stride)
     widths = widths / tf.to_float(grid_width * stride)
-    y_centers = tf.to_float(tf.range(grid_height))
+    y_centers = 0.5 + tf.to_float(tf.range(grid_height))
     y_centers = y_centers / tf.to_float(grid_height)
-    x_centers = tf.to_float(tf.range(grid_width))
+    x_centers = 0.5 + tf.to_float(tf.range(grid_width))
     x_centers = x_centers / tf.to_float(grid_width)
     x_centers, y_centers = tf.meshgrid(x_centers, y_centers)
 
@@ -199,6 +198,6 @@ def generate_anchors(grid_shape, base_anchor_size, stride,
     bbox_sizes = tf.stack([heights_grid, widths_grid], axis=2)
     bbox_centers = tf.reshape(bbox_centers, [-1, 2])
     bbox_sizes = tf.reshape(bbox_sizes, [-1, 2])
-    bboxes = tf.concat([bbox_centers,
-                        bbox_centers + bbox_sizes], axis=1)
+    bboxes = tf.concat([bbox_centers - 0.5 * bbox_sizes,
+                        bbox_centers + 0.5 * bbox_sizes], axis=1)
     return bboxes

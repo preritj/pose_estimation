@@ -1,5 +1,5 @@
 .idea/
-test.ipynb
+*.ipynb
 .ipynb_checkpoints/
 models/
 */__pycache__/
