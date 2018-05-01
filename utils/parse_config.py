@@ -39,7 +39,9 @@ class TrainConfig(yaml.YAMLObject):
                  learning_rate_decay=None,
                  optimizer=None,
                  augmentation=None,
-                 preprocess=None):
+                 preprocess=None,
+                 bbox_clf_weight=1.,
+                 bbox_reg_weight=1.):
         self.is_training = is_training
         if model_dir is None:
             model_dir = './models'
@@ -63,6 +65,8 @@ class TrainConfig(yaml.YAMLObject):
         self.optimizer = optimizer
         self.augmentation = augmentation
         self.preprocess = preprocess
+        self.bbox_clf_weight = bbox_clf_weight
+        self.bbox_reg_weight = bbox_reg_weight
 
     def __repr__(self):
         return 'train_config'

@@ -19,9 +19,8 @@ class MobilenetPose(Model):
         self._min_depth = cfg.min_depth
         self._skip_layers = cfg.skip_layers
         self._fpn_depth = cfg.fpn_depth
-        self._num_keypoints = cfg.num_keypoints
-        self._boxes_per_anchor = (len(self.cfg.anchor_scales) *
-                                  len(self.cfg.anchor_ratios))
+        self._boxes_per_anchor = (len(cfg.anchor_scales) *
+                                  len(cfg.anchor_ratios))
         super().__init__(cfg)
 
     def check_output_shape(self):
@@ -99,7 +98,7 @@ class MobilenetPose(Model):
 
     def bbox_clf_reg_net(self, fpn_features, is_training=False, scope=None):
         """Builds bbox classifier and regressor"""
-        num_fpn_layers = len(self.cfg.anchor_sizes)
+        num_fpn_layers = len(self.cfg.base_anchor_sizes)
         assert num_fpn_layers == len(fpn_features), \
             "Number of anchor sizes must match number of fpn layers"
         bbox_clf_logits = self.bbox_clf_net(
@@ -135,9 +134,12 @@ class MobilenetPose(Model):
                         scope=fpn_name)
                     net = slim.conv2d(
                         net, self._num_classes * self._boxes_per_anchor,
-                        [1, 1], activation_fn=None, scope='bbox_clf_logits')
-                    bbox_clf_logits[0:0] = net  # build top-down
-        return bbox_clf_logits
+                        [1, 1], activation_fn=None,
+                        scope='feat_' + str(i))
+                    logits = tf.reshape(net, [-1, 2])
+                    bbox_clf_logits.append(logits)
+        # return output list top-down
+        return tf.concat(bbox_clf_logits[::-1], axis=0)
 
     def bbox_reg_net(self, fpn_features, is_training=False, scope=None):
         """Builds bbox regressor
@@ -166,7 +168,11 @@ class MobilenetPose(Model):
                         scope=fpn_name)
                     net = slim.conv2d(
                         net, 4 * self._boxes_per_anchor, [1, 1],
-                        activation_fn=None, scope='bbox_regs')
-                    bbox_regs[0:0] = net  # build top-down
-        return bbox_regs
+                        activation_fn=None,
+                        scope='feat_' + str(i))
+                    # populate output list top-down
+                    regs = tf.reshape(net, [-1, 4])
+                    bbox_regs.append(regs)
+        # return output list top-down
+        return tf.concat(bbox_regs[::-1], axis=0)
 

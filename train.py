@@ -110,11 +110,12 @@ def get_model_fn(train_cfg):
         # inputs = {'images': features}
         # predictions = model.predict(inputs, is_training=is_training)
         predictions = model.predict(features, is_training=is_training)
-        heatmaps = predictions['heatmaps']
+        heatmaps_logits = predictions['heatmaps']
+        heatmaps = tf.nn.sigmoid(heatmaps_logits)
         summary_out = tf.expand_dims(
             tf.zeros_like(heatmaps[:, :, :, 0]), axis=-1)
         summary_out = tf.concat([summary_out, heatmaps], -1)
-        tf.summary.image('image', features, max_outputs=3)
+        tf.summary.image('image', features['images'], max_outputs=3)
         tf.summary.image('heatmap', summary_out, max_outputs=3)
         # Loss, training and eval operations are not needed during inference.
         loss = None
@@ -129,8 +130,12 @@ def get_model_fn(train_cfg):
             # ground_truth = {'heatmaps': heatmaps,
             #                 'masks': masks}
             ground_truth = labels
-            loss = model.losses(predictions, ground_truth)
-            loss = loss['l2_loss']
+            losses = model.losses(predictions, ground_truth)
+            for loss_name, loss_val in losses.items():
+                tf.summary.scalar(loss_name, loss_val)
+            loss = losses['heatmap_loss']
+            loss += train_cfg.bbox_clf_weight * losses['bbox_clf_loss']
+            loss += train_cfg.bbox_reg_weight * losses['bbox_reg_loss']
             train_op = get_train_op(loss, train_cfg)
             eval_metric_ops = None  # get_eval_metric_ops(labels, predictions)
         return tf.estimator.EstimatorSpec(

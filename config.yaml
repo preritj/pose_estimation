@@ -119,6 +119,9 @@ read_block_length: 32
 shuffle_buffer_size: 2048
 prefetch_size: 64  # ~ 2 x batch-size
 
+bbox_clf_weight: 3.
+bbox_reg_weight: 1.
+
 ###########################################
 # model parameters
 ###########################################
@@ -130,6 +133,7 @@ output_shape: [40, 40]
 depth_multiplier: 1.
 min_depth: 8
 
+# in top-down format
 base_anchor_sizes: [80, 160]
 anchor_strides: [16, 32]
 

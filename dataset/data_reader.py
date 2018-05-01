@@ -254,7 +254,6 @@ class PoseDataReader(object):
 
         train_keypoints = [self.data_cfg.keypoints[kp_name]
                            for kp_name in train_config.train_keypoints]
-        num_keypoints = len(train_keypoints)
         kp_subset_fn = functools.partial(
             keypoints_select, keypoints_to_keep=train_keypoints)
         dataset = dataset.map(
@@ -269,44 +268,51 @@ class PoseDataReader(object):
         #     keypoints_to_heatmap,
         #     num_keypoints=num_keypoints,
         #     sigma=self.data_cfg.sigma)
-        heatmap_fn = functools.partial(
-            keypoints_to_heatmap,
-            num_keypoints=num_keypoints)
-        dataset = dataset.map(
-            heatmap_fn,
-            num_parallel_calls=train_config.num_parallel_map_calls
-        )
-        dataset = dataset.prefetch(train_config.prefetch_size)
-        return dataset.prefetch(train_config.prefetch_size)
+
+        return dataset
 
     def get_features_labels_data(self, train_cfg, model_cfg):
         """returns dataset containing (features, labels)"""
+        num_keypoints = len(train_cfg.train_keypoints)
         dataset = self.read_data(train_cfg)
+        heatmap_fn = functools.partial(
+            keypoints_to_heatmap,
+            num_keypoints=num_keypoints,
+            grid_shape=model_cfg.output_shape)
+        dataset = dataset.map(
+            heatmap_fn,
+            num_parallel_calls=train_cfg.num_parallel_map_calls
+        )
+        dataset = dataset.prefetch(train_cfg.prefetch_size)
+
+        all_anchors = []
+        for i, (base_anchor_size, stride) in enumerate(zip(
+                model_cfg.base_anchor_sizes,
+                model_cfg.anchor_strides)):
+            grid_shape = tf.constant(
+                model_cfg.input_shape, tf.int32) / stride
+            anchors = generate_anchors(
+                grid_shape=grid_shape,
+                base_anchor_size=base_anchor_size,
+                stride=stride,
+                scales=model_cfg.anchor_scales,
+                aspect_ratios=model_cfg.anchor_ratios)
+            all_anchors.append(anchors)
+
+        all_anchors = tf.concat(all_anchors, axis=0)
 
         def map_fn(images, heatmaps, bboxes, masks):
             features = {'images': images}
-            bbox_labels = {}
-            for i, (base_anchor_size, stride) in enumerate(zip(
-                    model_cfg.base_anchor_sizes,
-                    model_cfg.anchor_strides)):
-                grid_shape = tf.constant(
-                    model_cfg.input_shape, tf.int32) / stride
-                anchors = generate_anchors(
-                    grid_shape=grid_shape,
-                    base_anchor_size=base_anchor_size,
-                    stride=stride,
-                    scales=model_cfg.anchor_scales,
-                    aspect_ratios=model_cfg.anchor_ratios)
-                classes, regs, weights = get_matches(
-                    gt_bboxes=bboxes,
-                    pred_bboxes=anchors,
-                    unmatched_threshold=model_cfg.unmatched_threshold,
-                    matched_threshold=model_cfg.matched_threshold,
-                    force_match_for_gt_bbox=model_cfg.force_match_for_gt_bbox,
-                    scale_factors=model_cfg.scale_factors)
-                bbox_labels['feat_'+str(i+1)] = {'classes': classes,
-                                                 'regs': regs,
-                                                 'weights': weights}
+            classes, regs, weights = get_matches(
+                gt_bboxes=bboxes,
+                pred_bboxes=all_anchors,
+                unmatched_threshold=model_cfg.unmatched_threshold,
+                matched_threshold=model_cfg.matched_threshold,
+                force_match_for_gt_bbox=model_cfg.force_match_for_gt_bbox,
+                scale_factors=model_cfg.scale_factors)
+            bbox_labels = {'classes': classes,
+                           'regs': regs,
+                           'weights': weights}
             masks.set_shape(model_cfg.input_shape)
             masks = tf.expand_dims(masks, axis=-1)
             masks = tf.image.resize_images(
