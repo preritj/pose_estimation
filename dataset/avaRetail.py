@@ -7,10 +7,12 @@ from dataset.pose_data import PoseData
 
 
 class AVAretail(PoseData):
-    def __init__(self, pose_cfg, image_dir, annotation_files=None):
+    def __init__(self, pose_cfg, image_dir, annotation_files=None,
+                 img_shape=None):
         self.idx_count = 0
         self.idx_map = {}
-        super().__init__(pose_cfg, image_dir, annotation_files)
+        super().__init__(pose_cfg, image_dir, annotation_files,
+                         img_shape)
 
     def _build_dataset(self, dataset):
         for i, annotations in tqdm(enumerate(dataset)):
@@ -18,8 +20,13 @@ class AVAretail(PoseData):
             self.idx_count += 1
             img_name = annotations['FileName']
             img_path = os.path.join(self.image_dir, img_name)
-            im = Image.open(img_path)
-            width, height = im.size
+            if not os.path.exists(img_path):
+                print("Warning: {} does not exist".format(img_path))
+            if self.static_img_shape is None:
+                im = Image.open(img_path)
+                width, height = im.size
+            else:
+                width, height = list(self.static_img_shape)[:2]
             self.imgs[img_id] = {'filename': img_name,
                                  'shape': [height, width]}
             persons = annotations['Persons']
@@ -38,8 +45,9 @@ class AVAretail(PoseData):
                     ymax = int(min(ymin + h, height - 1))
                     xmin, ymin = int(max(0, xmin)), int(max(0, ymin))
                     bbox = [ymin, xmin, ymax, xmax]
-                if 'Keypoints' not in person.keys():
-                    # TODO: make mask using bbox
+                if (('Keypoints' not in person.keys())
+                        or (person['Keypoints'] is None)):
+                    # make mask using bbox
                     if bbox is not None:
                         ymin, xmin, ymax, xmax = bbox
                         patch_pts = [xmin, ymin,

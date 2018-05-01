@@ -78,7 +78,15 @@ class ModelConfig(yaml.YAMLObject):
                  depth_multiplier=1.,
                  min_depth=8,
                  skip_layers=None,
-                 fpn_depth=96):
+                 fpn_depth=96,
+                 base_anchor_sizes=None,
+                 base_anchor_strides=None,
+                 anchor_scales=None,
+                 anchor_ratios=None,
+                 unmatched_threshold=0.4,
+                 matched_threshold=0.7,
+                 force_match_for_gt_bbox=True,
+                 scale_factors=None):
         self.model_name = model_name
         if input_shape is None:
             input_shape = [224, 224]
@@ -92,6 +100,16 @@ class ModelConfig(yaml.YAMLObject):
             skip_layers = []
         self.skip_layers = skip_layers
         self.fpn_depth = fpn_depth
+        self.base_anchor_sizes = base_anchor_sizes
+        self.base_anchor_strides = base_anchor_strides
+        self.anchor_ratios = anchor_ratios
+        self.anchor_scales = anchor_scales
+        self.unmatched_threshold = unmatched_threshold
+        self.matched_threshold = matched_threshold
+        self.force_match_for_gt_bbox = force_match_for_gt_bbox
+        if scale_factors is None:
+            scale_factors = [10., 5.]
+        self.scale_factors = scale_factors
 
     def __repr__(self):
         return 'model_config'

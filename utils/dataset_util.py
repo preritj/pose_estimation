@@ -252,25 +252,40 @@ def keypoints_to_heatmap(image, keypoints, bboxes, mask,
                          num_keypoints=15,
                          grid_shape=(28, 28)):
     """Mask-rcnn method of generating heatmaps"""
-    grid_shape_ = tf.constant(list(grid_shape), tf.int64)
+    keypoints = tf.clip_by_value(keypoints,
+                                 clip_value_min=0.,
+                                 clip_value_max=.999)
+    grid_shape_ = tf.constant(list(grid_shape), tf.int32)
     keypoints.set_shape([None, num_keypoints, 3])
+    num_instances = tf.shape(keypoints)[0]
+    kp_indices = tf.range(0, num_keypoints, dtype=tf.int32)
+    kp_indices = tf.tile(kp_indices, [num_instances])
+    kp_indices = tf.reshape(kp_indices, [-1, 1])
+    n_indices = tf.range(0, num_instances, dtype=tf.int32)
+    n_indices = tf.tile(
+        tf.reshape(n_indices, [-1, 1]), [1, num_keypoints])
+    n_indices = tf.reshape(n_indices, [-1, 1])
     keypoints_ = tf.reshape(keypoints, [-1, 3])
     keypoints_x, keypoints_y, keypoints_vis = tf.split(
         keypoints_, num_or_size_splits=3, axis=1)
-    x_indices = tf.floor(
-        keypoints_x * tf.to_float(grid_shape_[1]))
-    y_indices = tf.floor(
-        keypoints_y * tf.to_float(grid_shape_[0]))
-    indices = tf.to_int64(tf.concat([y_indices, x_indices],
-                                    axis=1))
+    x_indices = tf.to_int32(tf.floor(
+        keypoints_x * tf.to_float(grid_shape_[1])))
+    y_indices = tf.to_int32(tf.floor(
+        keypoints_y * tf.to_float(grid_shape_[0])))
+    indices = tf.to_int64(tf.concat(
+        [n_indices, kp_indices, y_indices, x_indices],
+        axis=1))
     keypoints_vis = tf.squeeze(keypoints_vis, [1])
     values = tf.cast(tf.greater(keypoints_vis, 0.), tf.int32)
+    dense_shape = tf.to_int64(tf.concat(
+        [tf.shape(keypoints)[:2], grid_shape_], axis=0))
     heatmap = tf.SparseTensor(
         indices=indices,
         values=values,
-        dense_shape=grid_shape_)
-    shape = [-1, 15, grid_shape[0], grid_shape[1]]
+        dense_shape=dense_shape)
+    shape = [-1, num_keypoints, grid_shape[0], grid_shape[1]]
     heatmap = tf.sparse_reshape(heatmap, shape=shape)
-    heatmap = tf.sparse_reduce_max(heatmap, axis=0)
+    heatmap = tf.sparse_reduce_max_sparse(heatmap, axis=0)
     heatmap = tf.sparse_transpose(heatmap, [1, 2, 0])
+    heatmap = tf.sparse_tensor_to_dense(heatmap)
     return image, heatmap, bboxes, mask

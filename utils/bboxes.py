@@ -68,7 +68,7 @@ def get_matches(gt_bboxes, pred_bboxes,
                    - 2 * between_thresholds)
 
         if force_match_for_gt_bbox:
-            best_pred_matches = tf.argmax(iou_matrix, 0,
+            best_pred_matches = tf.argmax(iou_matrix, 1,
                                           output_type=tf.int32)
             best_pred_match_matrix = tf.one_hot(
                 best_pred_matches, depth=num_preds)
@@ -89,8 +89,9 @@ def get_matches(gt_bboxes, pred_bboxes,
     dummy_bboxes = tf.zeros([2, 4])
     bboxes = tf.concat([dummy_bboxes, gt_bboxes], axis=0)
     matched_gt_bboxes = tf.gather(bboxes, gather_indices)
-    matched_regs = bbox_encode(
-        matched_gt_bboxes, pred_bboxes, scale_factors)
+    matched_regs = matched_gt_bboxes
+    #matched_regs = bbox_encode(
+    #    matched_gt_bboxes, pred_bboxes, scale_factors)
     matched_classes = tf.cast(
         tf.greater(matched_indices, -1), tf.int32)
     matched_weights = tf.cast(
@@ -176,24 +177,28 @@ def generate_anchors(grid_shape, base_anchor_size, stride,
         where N = grid_h * grid_w * (bboxes per anchor)
         and bboxes have format (y1, x1, y2, x2)
     """
-    ratio_sqrts = tf.sqrt(aspect_ratios)
-    heights = scales / ratio_sqrts * base_anchor_size[0]
-    widths = scales * ratio_sqrts * base_anchor_size[1]
+    scales, aspect_ratios = tf.meshgrid(scales, aspect_ratios)
+    scales = tf.squeeze(scales)
+    ratio_sqrts = tf.sqrt(tf.squeeze(aspect_ratios))
+    heights = scales / ratio_sqrts * base_anchor_size
+    widths = scales * ratio_sqrts * base_anchor_size
 
     # Get a grid of box centers
     grid_height, grid_width = grid_shape[0], grid_shape[1]
+    heights = heights / tf.to_float(grid_height * stride)
+    widths = widths / tf.to_float(grid_width * stride)
     y_centers = tf.to_float(tf.range(grid_height))
-    y_centers = y_centers * stride[0]
+    y_centers = y_centers / tf.to_float(grid_height)
     x_centers = tf.to_float(tf.range(grid_width))
-    x_centers = x_centers * stride[1]
+    x_centers = x_centers / tf.to_float(grid_width)
     x_centers, y_centers = tf.meshgrid(x_centers, y_centers)
 
     widths_grid, x_centers_grid = tf.meshgrid(widths, x_centers)
     heights_grid, y_centers_grid = tf.meshgrid(heights, y_centers)
-    bbox_centers = tf.stack([y_centers_grid, x_centers_grid], axis=3)
-    bbox_sizes = tf.stack([heights_grid, widths_grid], axis=3)
+    bbox_centers = tf.stack([y_centers_grid, x_centers_grid], axis=2)
+    bbox_sizes = tf.stack([heights_grid, widths_grid], axis=2)
     bbox_centers = tf.reshape(bbox_centers, [-1, 2])
     bbox_sizes = tf.reshape(bbox_sizes, [-1, 2])
-    bboxes = tf.concat([bbox_centers - 0.5 * bbox_sizes,
-                        bbox_centers + 0.5 * bbox_sizes], axis=1)
+    bboxes = tf.concat([bbox_centers,
+                        bbox_centers + bbox_sizes], axis=1)
     return bboxes

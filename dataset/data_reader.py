@@ -10,6 +10,7 @@ from utils.dataset_util import (
     normalize_bboxes, normalize_keypoints, random_crop,
     random_flip_left_right, keypoints_to_heatmap,
     keypoints_select, resize)
+from utils.bboxes import generate_anchors, get_matches
 
 slim_example_decoder = tf.contrib.slim.tfexample_decoder
 
@@ -37,7 +38,8 @@ class PoseDataReader(object):
 
     def add_dataset(self, name, img_dir, tfrecord_path,
                     annotation_files=None, weight=1.,
-                    overwrite_tfrecord=False):
+                    overwrite_tfrecord=False,
+                    img_shape=None):
         tfrecord_dir = os.path.dirname(tfrecord_path)
         if not os.path.exists(tfrecord_dir):
             os.makedirs(tfrecord_dir)
@@ -51,7 +53,8 @@ class PoseDataReader(object):
             elif name == 'posetrack':
                 ds = PoseTrack(self.pose_cfg, img_dir, annotation_files)
             elif name == 'ava':
-                ds = AVAretail(self.pose_cfg, img_dir, annotation_files)
+                ds = AVAretail(self.pose_cfg, img_dir, annotation_files,
+                               img_shape)
             else:
                 raise RuntimeError('Dataset not supported')
             ds.create_tf_record(tfrecord_path)
@@ -262,44 +265,67 @@ class PoseDataReader(object):
         dataset = self.augment_data(dataset, train_config)
 
         dataset = self.preprocess_data(dataset, train_config)
+        # heatmap_fn = functools.partial(
+        #     keypoints_to_heatmap,
+        #     num_keypoints=num_keypoints,
+        #     sigma=self.data_cfg.sigma)
         heatmap_fn = functools.partial(
             keypoints_to_heatmap,
-            num_keypoints=num_keypoints,
-            sigma=self.data_cfg.sigma)
+            num_keypoints=num_keypoints)
         dataset = dataset.map(
             heatmap_fn,
             num_parallel_calls=train_config.num_parallel_map_calls
         )
         dataset = dataset.prefetch(train_config.prefetch_size)
-
-        # TODO : build padding for bbox batching, for now we remove bbox
-        dataset = dataset.map(lambda a, b, _, c: (a, b, c))
         return dataset.prefetch(train_config.prefetch_size)
 
     def get_features_labels_data(self, train_cfg, model_cfg):
         """returns dataset containing (features, labels)"""
         dataset = self.read_data(train_cfg)
 
-        def map_fn(images, heatmaps, masks):
+        def map_fn(images, heatmaps, bboxes, masks):
             features = {'images': images}
-            heatmaps = tf.image.resize_bilinear(
-                heatmaps, size=model_cfg.output_shape)
+            bbox_labels = {}
+            for i, (base_anchor_size, stride) in enumerate(zip(
+                    model_cfg.base_anchor_sizes,
+                    model_cfg.anchor_strides)):
+                grid_shape = tf.constant(
+                    model_cfg.input_shape, tf.int32) / stride
+                anchors = generate_anchors(
+                    grid_shape=grid_shape,
+                    base_anchor_size=base_anchor_size,
+                    stride=stride,
+                    scales=model_cfg.anchor_scales,
+                    aspect_ratios=model_cfg.anchor_ratios)
+                classes, regs, weights = get_matches(
+                    gt_bboxes=bboxes,
+                    pred_bboxes=anchors,
+                    unmatched_threshold=model_cfg.unmatched_threshold,
+                    matched_threshold=model_cfg.matched_threshold,
+                    force_match_for_gt_bbox=model_cfg.force_match_for_gt_bbox,
+                    scale_factors=model_cfg.scale_factors)
+                bbox_labels['feat_'+str(i+1)] = {'classes': classes,
+                                                 'regs': regs,
+                                                 'weights': weights}
+            masks.set_shape(model_cfg.input_shape)
             masks = tf.expand_dims(masks, axis=-1)
-            masks = tf.image.resize_bilinear(
+            masks = tf.image.resize_images(
                 masks, size=model_cfg.output_shape)
             masks = tf.squeeze(masks)
             labels = {'heatmaps': heatmaps,
-                      'masks': masks}
+                      'masks': masks,
+                      'bboxes': bbox_labels}
             return features, labels
-            # # append mask to last layer
-            # heatmaps = tf.transpose(heatmaps, [0, 2, 3, 1])
-            # masks = tf.expand_dims(masks, axis=-1)
-            # labels = tf.concat([heatmaps, masks], axis=-1)
-            # return images, labels
 
         dataset = dataset.map(
             map_fn, num_parallel_calls=train_cfg.num_parallel_map_calls)
         dataset = dataset.prefetch(train_cfg.prefetch_size)
+        # dataset = dataset.padded_batch(
+        #     batch_size=train_cfg.batch_size,
+        #     padded_shapes=({'images': [None, None, 3]},
+        #                    {'heatmaps': [None, None, None],
+        #                     'masks': [None, None],
+        #                     'bboxes': [None, 4]}))
         dataset = dataset.batch(train_cfg.batch_size)
         dataset = dataset.prefetch(train_cfg.prefetch_size)
         return dataset

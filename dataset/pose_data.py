@@ -13,7 +13,8 @@ import tensorflow as tf
 
 
 class PoseData(object):
-    def __init__(self, pose_cfg, image_dir, annotation_files=None):
+    def __init__(self, pose_cfg, image_dir, annotation_files=None,
+                 img_shape=None):
         """
         Constructor of Pose class for reading and visualizing annotations
          from human pose datasets.
@@ -23,6 +24,7 @@ class PoseData(object):
         :return:
         """
         self.image_dir = image_dir
+        self.static_img_shape = img_shape
         assert os.path.exists(image_dir), "Image directory not found"
         self.keypoints = pose_cfg['keypoints']
         self.num_keypoints = pose_cfg['num_keypoints']

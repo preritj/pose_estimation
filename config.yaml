@@ -7,6 +7,7 @@
 # annotation files must be specified if tfrecord doesn't exist
 # weight defaults to 1. if not specified
 # overwrite_tfrecord defaults to false if not specified
+# img_shape defaults to None if not specified
 
 # For example to include coco train and validation sets:
 # datasets:
@@ -128,6 +129,17 @@ output_shape: [40, 40]
 
 depth_multiplier: 1.
 min_depth: 8
+
+base_anchor_sizes: [80, 160]
+anchor_strides: [16, 32]
+
+anchor_scales: [1.]
+anchor_ratios: [0.5, 1., 2.]
+
+unmatched_threshold: 0.4
+matched_threshold: 0.7
+force_match_for_gt_bbox: true
+scale_factors: [10., 5.]
 
 skip_layers:
   - InvertedResidual_32_2
