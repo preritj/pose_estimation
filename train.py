@@ -5,6 +5,9 @@ from model.mobilenet_pose import MobilenetPose
 import functools
 from dataset.data_reader import PoseDataReader
 from utils.parse_config import parse_config
+from utils.bboxes import (generate_anchors, get_matches,
+                          bbox_decode)
+from utils.dataset_util import keypoints_to_heatmap
 
 slim = tf.contrib.slim
 
@@ -21,6 +24,112 @@ class Trainer(object):
             **self.model_cfg.__dict__,
             num_keypoints=len(self.train_cfg.train_keypoints))
         self.data_reader = PoseDataReader(self.data_cfg)
+        self.anchors = self.generate_anchors()
+
+    def generate_anchors(self):
+        all_anchors = []
+        for i, (base_anchor_size, stride) in enumerate(zip(
+                self.model_cfg.base_anchor_sizes,
+                self.model_cfg.anchor_strides)):
+            grid_shape = tf.constant(
+                self.model_cfg.input_shape, tf.int32) / stride
+            anchors = generate_anchors(
+                grid_shape=grid_shape,
+                base_anchor_size=base_anchor_size,
+                stride=stride,
+                scales=self.model_cfg.anchor_scales,
+                aspect_ratios=self.model_cfg.anchor_ratios)
+            all_anchors.append(anchors)
+        return tf.concat(all_anchors, axis=0)
+
+    def get_features_labels_data(self):
+        """returns dataset containing (features, labels)"""
+        model_cfg = self.model_cfg
+        train_cfg = self.train_cfg
+        num_keypoints = len(train_cfg.train_keypoints)
+        dataset = self.data_reader.read_data(train_cfg)
+        heatmap_fn = functools.partial(
+            keypoints_to_heatmap,
+            num_keypoints=num_keypoints,
+            grid_shape=model_cfg.output_shape)
+        dataset = dataset.map(
+            heatmap_fn,
+            num_parallel_calls=train_cfg.num_parallel_map_calls
+        )
+        dataset = dataset.prefetch(train_cfg.prefetch_size)
+
+        def map_fn(images, heatmaps, bboxes, masks):
+            features = {'images': images}
+            classes, regs, weights = get_matches(
+                gt_bboxes=bboxes,
+                pred_bboxes=self.anchors,
+                unmatched_threshold=model_cfg.unmatched_threshold,
+                matched_threshold=model_cfg.matched_threshold,
+                force_match_for_gt_bbox=model_cfg.force_match_for_gt_bbox,
+                scale_factors=model_cfg.scale_factors)
+            bbox_labels = {'classes': classes,
+                           'regs': regs,
+                           'weights': weights}
+            masks.set_shape(model_cfg.input_shape)
+            masks = tf.expand_dims(masks, axis=-1)
+            masks = tf.image.resize_images(
+                masks, size=model_cfg.output_shape)
+            masks = tf.squeeze(masks)
+            labels = {'heatmaps': heatmaps,
+                      'masks': masks,
+                      'bboxes': bbox_labels}
+            return features, labels
+
+        dataset = dataset.map(
+            map_fn, num_parallel_calls=train_cfg.num_parallel_map_calls)
+        dataset = dataset.prefetch(train_cfg.prefetch_size)
+        # dataset = dataset.padded_batch(
+        #     batch_size=train_cfg.batch_size,
+        #     padded_shapes=({'images': [None, None, 3]},
+        #                    {'heatmaps': [None, None, None],
+        #                     'masks': [None, None],
+        #                     'bboxes': [None, 4]}))
+        dataset = dataset.batch(train_cfg.batch_size)
+        dataset = dataset.prefetch(train_cfg.prefetch_size)
+        return dataset
+
+    def prepare_tf_summary(self, features, predictions, max_display=3):
+        batch_size = self.train_cfg.batch_size
+        images = tf.split(
+            features['images'],
+            num_or_size_splits=batch_size,
+            axis=0)
+        heatmaps_logits = predictions['heatmaps']
+        heatmaps = tf.nn.sigmoid(heatmaps_logits)
+        heatmap_out = tf.expand_dims(
+            tf.zeros_like(heatmaps[:, :, :, 0]), axis=-1)
+        heatmap_out = tf.concat([heatmap_out, heatmaps], -1)
+        bbox_clf_logits = predictions['bbox_clf_logits']
+        _, bbox_probs = tf.split(
+            tf.nn.softmax(bbox_clf_logits),
+            num_or_size_splits=2,
+            axis=1)
+        bbox_probs = tf.split(
+            tf.squeeze(bbox_probs),
+            num_or_size_splits=batch_size,
+            axis=0)
+        bbox_regs = tf.split(
+            predictions['bbox_regs'],
+            num_or_size_splits=batch_size,
+            axis=0)
+        out_images = []
+        for i in range(max_display):
+            select = tf.greater(bbox_probs[0], 0.5)
+            bboxes = tf.boolean_mask(bbox_regs[i], select)
+            anchors = tf.boolean_mask(self.anchors, select)
+            bboxes = bbox_decode(
+                bboxes, anchors, self.model_cfg.scale_factors)
+            bboxes = tf.expand_dims(bboxes, axis=0)
+            out_images.append(tf.image.draw_bounding_boxes(
+                images[i], bboxes))
+        out_images = tf.concat(out_images, axis=0)
+        tf.summary.image('bboxes', out_images, max_display)
+        tf.summary.image('heatmap', heatmap_out, max_display)
 
     def train(self):
         """run training experiment"""
@@ -151,13 +260,7 @@ class Trainer(object):
             # inputs = {'images': features}
             # predictions = model.predict(inputs, is_training=is_training)
             predictions = model.predict(features, is_training=is_training)
-            heatmaps_logits = predictions['heatmaps']
-            heatmaps = tf.nn.sigmoid(heatmaps_logits)
-            summary_out = tf.expand_dims(
-                tf.zeros_like(heatmaps[:, :, :, 0]), axis=-1)
-            summary_out = tf.concat([summary_out, heatmaps], -1)
-            tf.summary.image('image', features['images'], max_outputs=3)
-            tf.summary.image('heatmap', summary_out, max_outputs=3)
+            self.prepare_tf_summary(features, predictions)
             # Loss, training and eval operations are not needed during inference.
             loss = None
             train_op = None
@@ -194,8 +297,7 @@ class Trainer(object):
         """
         # TODO : add multi-gpu training
         with tf.device('/cpu:0'):
-            dataset = self.data_reader.get_features_labels_data(
-                self.train_cfg, self.model_cfg)
+            dataset = self.get_features_labels_data()
             return dataset
 
 

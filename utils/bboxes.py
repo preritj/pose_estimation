@@ -133,7 +133,7 @@ def bbox_decode(bboxes, anchors, scale_factors=None):
     """Bbox decoder (ty, tx, th, tw) -> (y1, x1, y2, x2)
     Args:
       bboxes: Tensor of shape [N, 4]
-      anchors: Tensor of shape [M, 4]
+      anchors: Tensor of shape [N, 4]
       scale_factors: 2D array e.g. [10., 5.]
     Returns:
       decoded bboxes: Tensor of shape [N, 4]
