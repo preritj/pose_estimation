@@ -87,8 +87,8 @@ model_dir: './models'
 num_epochs: 0
 learning_rate: 0.001
 learning_rate_decay:
-  decay_steps: 10000
-  decay_rate: 0.97
+  decay_steps: 3000
+  decay_rate: 0.95
 
 batch_size: 32
 shuffle: true
@@ -100,7 +100,7 @@ train_keypoints:
 augmentation:
   flip_left_right: true
   random_crop: true
-  scale_range: [2., 4.25]
+  scale_range: [3., 5.]
 
 preprocess:
   image_resize: [320, 320]
@@ -119,8 +119,8 @@ read_block_length: 32
 shuffle_buffer_size: 2048
 prefetch_size: 64  # ~ 2 x batch-size
 
-bbox_clf_weight: 3.
-bbox_reg_weight: 1.
+bbox_clf_weight: 2.
+bbox_reg_weight: 3.
 
 ###########################################
 # model parameters
@@ -134,7 +134,7 @@ depth_multiplier: 1.
 min_depth: 8
 
 # in top-down format
-base_anchor_sizes: [80, 160]
+base_anchor_sizes: [60, 120]
 anchor_strides: [16, 32]
 
 anchor_scales: [1.]

@@ -59,15 +59,28 @@ class Model:
                           clf_weights, regs_gt, regs_pred):
         clf_labels = tf.reshape(clf_labels, [-1])
         clf_weights = tf.reshape(clf_weights, [-1])
+        # n_pos_labels = tf.to_float(tf.reduce_sum(clf_labels))
+        # n_labels = tf.reduce_sum(clf_weights)
+        # n_neg_labels = n_labels - n_pos_labels
+        # scale_factor = tf.cond(
+        #     tf.greater(n_pos_labels, 0),
+        #     lambda: tf.pow(n_neg_labels / n_pos_labels, .3),
+        #     lambda: 1.)
+        # clf_weights += tf.to_float(clf_labels) * scale_factor
         regs_gt = tf.reshape(regs_gt, [-1, 4])
         clf_loss = tf.losses.sparse_softmax_cross_entropy(
             labels=clf_labels,
             logits=clf_logits,
             weights=clf_weights)
-        reg_loss = tf.losses.mean_squared_error(
+        reg_loss = tf.losses.huber_loss(
             labels=regs_gt,
             predictions=regs_pred,
+            delta=1.,
             reduction=tf.losses.Reduction.NONE)
+        # reg_loss = tf.losses.mean_squared_error(
+        #     labels=regs_gt,
+        #     predictions=regs_pred,
+        #     reduction=tf.losses.Reduction.NONE)
         reg_loss = tf.reduce_sum(reg_loss, axis=-1)
         reg_loss = tf.reduce_mean(
             reg_loss * tf.to_float(clf_labels))

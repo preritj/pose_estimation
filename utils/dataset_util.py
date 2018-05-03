@@ -137,7 +137,7 @@ def random_crop(image, keypoints, bboxes, mask,
 
     crop_size = tf.constant(list(crop_size), tf.float32)
     # cap min scale at 0.5 to prevent bad resolution
-    scale_min = tf.maximum(scale_range[0] * scale_ratio, 0.5)
+    scale_min = tf.maximum(scale_range[0] * scale_ratio, 0.7)
     # max scale has to be greater than min scale (1.1 * min scale)
     scale_max = tf.maximum(scale_range[1] * scale_ratio,
                            1.1 * scale_min)

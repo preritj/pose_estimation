@@ -91,9 +91,9 @@ class MobilenetPose(Model):
                     stride=1,
                     expand_ratio=6,
                     scope='InvertedResidual_final')
-                net = slim.conv2d(net, self._num_keypoints, [1, 1],
-                                  activation_fn=None,
-                                  scope='heatmap')
+            net = slim.conv2d(net, self._num_keypoints, [1, 1],
+                              activation_fn=None, normalizer_fn=None,
+                              normalizer_params=None, scope='heatmap')
         return net, fpn_layers
 
     def bbox_clf_reg_net(self, fpn_features, is_training=False, scope=None):
@@ -101,12 +101,11 @@ class MobilenetPose(Model):
         num_fpn_layers = len(self.cfg.base_anchor_sizes)
         assert num_fpn_layers == len(fpn_features), \
             "Number of anchor sizes must match number of fpn layers"
-        bbox_clf_logits = self.bbox_clf_net(
-            fpn_features, is_training, scope)
-        bbox_regs = self.bbox_reg_net(fpn_features, is_training, scope)
+        bbox_clf_logits = self.bbox_clf_net(fpn_features)
+        bbox_regs = self.bbox_reg_net(fpn_features)
         return bbox_clf_logits, bbox_regs
 
-    def bbox_clf_net(self, fpn_features, is_training=False, scope=None):
+    def bbox_clf_net(self, fpn_features):
         """Builds bbox classifier
         Args:
           fpn_features : dictionary of FPN features with keys as layer name
@@ -121,27 +120,36 @@ class MobilenetPose(Model):
             where K is the number of classes
             """
         bbox_clf_logits = []
-        with tf.variable_scope(scope, 'bbox_clf'):
-            with slim.arg_scope(mobilenet_v2_arg_scope(
-                    is_training=is_training)):
-                for i, fpn_name in enumerate(fpn_features.keys()):
+        with tf.variable_scope('bbox_clf', reuse=tf.AUTO_REUSE):
+            with slim.arg_scope([slim.conv2d], activation_fn=None,
+                                normalizer_fn=None, normalizer_params=None):
+                strides = self.cfg.anchor_strides
+                for stride, fpn_name in zip(strides,
+                                            reversed(fpn_features.keys())):
                     net = fpn_features[fpn_name]
-                    net = inverted_residual_bottleneck(
-                        net,
-                        depth=64,
-                        stride=1,
-                        expand_ratio=6,
-                        scope=fpn_name)
+                    # net = inverted_residual_bottleneck(
+                    #     net,
+                    #     depth=64,
+                    #     stride=1,
+                    #     expand_ratio=6,
+                    #     scope=fpn_name)
+                    net = slim.conv2d(
+                        net, self._fpn_depth, [3, 3], scope='clf_rpn')
                     net = slim.conv2d(
                         net, self._num_classes * self._boxes_per_anchor,
-                        [1, 1], activation_fn=None,
-                        scope='feat_' + str(i))
-                    logits = tf.reshape(net, [-1, 2])
+                        [1, 1], scope='clf_feat')
+                    grid_h = self.cfg.input_shape[0] // stride
+                    grid_w = self.cfg.input_shape[1] // stride
+                    n_anchors = grid_h * grid_w * self._boxes_per_anchor
+                    logits = tf.reshape(
+                        net, [-1, n_anchors * self._num_classes])
                     bbox_clf_logits.append(logits)
-        # return output list top-down
-        return tf.concat(bbox_clf_logits[::-1], axis=0)
+        bbox_clf_logits = tf.concat(bbox_clf_logits, axis=1)
+        bbox_clf_logits = tf.reshape(
+            bbox_clf_logits, [-1, self._num_classes])
+        return bbox_clf_logits
 
-    def bbox_reg_net(self, fpn_features, is_training=False, scope=None):
+    def bbox_reg_net(self, fpn_features):
         """Builds bbox regressor
         Args:
           fpn_features : dictionary of FPN features with keys as layer name
@@ -155,24 +163,29 @@ class MobilenetPose(Model):
             Each tensor has shape [N, h_i, w_i, 4 * (num of boxes per anchor)]
             """
         bbox_regs = []
-        with tf.variable_scope(scope, 'bbox_reg'):
-            with slim.arg_scope(mobilenet_v2_arg_scope(
-                    is_training=is_training)):
-                for i, fpn_name in enumerate(fpn_features.keys()):
+        with tf.variable_scope('bbox_reg', reuse=tf.AUTO_REUSE):
+            with slim.arg_scope([slim.conv2d], activation_fn=None,
+                                normalizer_fn=None, normalizer_params=None):
+                strides = self.cfg.anchor_strides
+                for stride, fpn_name in zip(strides,
+                                            reversed(fpn_features.keys())):
                     net = fpn_features[fpn_name]
-                    net = inverted_residual_bottleneck(
-                        net,
-                        depth=64,
-                        stride=1,
-                        expand_ratio=6,
-                        scope=fpn_name)
+                    # net = inverted_residual_bottleneck(
+                    #     net,
+                    #     depth=64,
+                    #     stride=1,
+                    #     expand_ratio=6,
+                    #     scope=fpn_name)
                     net = slim.conv2d(
-                        net, 4 * self._boxes_per_anchor, [1, 1],
-                        activation_fn=None,
-                        scope='feat_' + str(i))
-                    # populate output list top-down
-                    regs = tf.reshape(net, [-1, 4])
+                        net, self._fpn_depth, [3, 3], scope='reg_rpn')
+                    net = slim.conv2d(
+                        net, 4 * self._boxes_per_anchor,
+                        [1, 1], scope='reg_feat')
+                    grid_h = self.cfg.input_shape[0] // stride
+                    grid_w = self.cfg.input_shape[1] // stride
+                    n_anchors = grid_h * grid_w * self._boxes_per_anchor
+                    regs = tf.reshape(net, [-1, 4 * n_anchors])
                     bbox_regs.append(regs)
-        # return output list top-down
-        return tf.concat(bbox_regs[::-1], axis=0)
-
+        bbox_regs = tf.concat(bbox_regs, axis=1)
+        bbox_regs = tf.reshape(bbox_regs, [-1, 4])
+        return bbox_regs

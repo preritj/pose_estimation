@@ -23,8 +23,6 @@ class Trainer(object):
         self.hparams = tf.contrib.training.HParams(
             **self.model_cfg.__dict__,
             num_keypoints=len(self.train_cfg.train_keypoints))
-        self.data_reader = PoseDataReader(self.data_cfg)
-        self.anchors = self.generate_anchors()
 
     def generate_anchors(self):
         all_anchors = []
@@ -46,8 +44,10 @@ class Trainer(object):
         """returns dataset containing (features, labels)"""
         model_cfg = self.model_cfg
         train_cfg = self.train_cfg
+        anchors = self.generate_anchors()
         num_keypoints = len(train_cfg.train_keypoints)
-        dataset = self.data_reader.read_data(train_cfg)
+        data_reader = PoseDataReader(self.data_cfg)
+        dataset = data_reader.read_data(train_cfg)
         heatmap_fn = functools.partial(
             keypoints_to_heatmap,
             num_keypoints=num_keypoints,
@@ -62,7 +62,7 @@ class Trainer(object):
             features = {'images': images}
             classes, regs, weights = get_matches(
                 gt_bboxes=bboxes,
-                pred_bboxes=self.anchors,
+                pred_bboxes=anchors,
                 unmatched_threshold=model_cfg.unmatched_threshold,
                 matched_threshold=model_cfg.matched_threshold,
                 force_match_for_gt_bbox=model_cfg.force_match_for_gt_bbox,
@@ -83,17 +83,12 @@ class Trainer(object):
         dataset = dataset.map(
             map_fn, num_parallel_calls=train_cfg.num_parallel_map_calls)
         dataset = dataset.prefetch(train_cfg.prefetch_size)
-        # dataset = dataset.padded_batch(
-        #     batch_size=train_cfg.batch_size,
-        #     padded_shapes=({'images': [None, None, 3]},
-        #                    {'heatmaps': [None, None, None],
-        #                     'masks': [None, None],
-        #                     'bboxes': [None, 4]}))
         dataset = dataset.batch(train_cfg.batch_size)
         dataset = dataset.prefetch(train_cfg.prefetch_size)
         return dataset
 
     def prepare_tf_summary(self, features, predictions, max_display=3):
+        all_anchors = self.generate_anchors()
         batch_size = self.train_cfg.batch_size
         images = tf.split(
             features['images'],
@@ -118,15 +113,26 @@ class Trainer(object):
             num_or_size_splits=batch_size,
             axis=0)
         out_images = []
+
         for i in range(max_display):
-            select = tf.greater(bbox_probs[0], 0.5)
-            bboxes = tf.boolean_mask(bbox_regs[i], select)
-            anchors = tf.boolean_mask(self.anchors, select)
-            bboxes = bbox_decode(
-                bboxes, anchors, self.model_cfg.scale_factors)
-            bboxes = tf.expand_dims(bboxes, axis=0)
-            out_images.append(tf.image.draw_bounding_boxes(
-                images[i], bboxes))
+            def _draw_bboxes():
+                bboxes = tf.gather(bbox_regs[i], indices)
+                # bboxes = tf.zeros_like(bboxes)
+                anchors = tf.gather(all_anchors, indices)
+                bboxes = bbox_decode(
+                    bboxes, anchors, self.model_cfg.scale_factors)
+                bboxes = tf.expand_dims(bboxes, axis=0)
+                return tf.image.draw_bounding_boxes(
+                    images[i], bboxes)
+
+            indices = tf.squeeze(tf.where(
+                tf.greater(bbox_probs[i], 0.5)))
+            out_image = tf.cond(
+                tf.greater(tf.rank(indices), 0),
+                true_fn=_draw_bboxes,
+                false_fn=lambda: images[i])
+            out_images.append(out_image)
+
         out_images = tf.concat(out_images, axis=0)
         tf.summary.image('bboxes', out_images, max_display)
         tf.summary.image('heatmap', heatmap_out, max_display)
@@ -162,7 +168,15 @@ class Trainer(object):
             config=run_config  # RunConfig
         )
 
-        train_input_fn = self.input_fn
+        def train_input_fn():
+            """Create input graph for model.
+            """
+            # TODO : add multi-gpu training
+            with tf.device('/cpu:0'):
+                dataset = self.get_features_labels_data()
+                return dataset
+
+        # train_input_fn = self.input_fn
         estimator.train(input_fn=train_input_fn)
 
     def get_optimizer_fn(self):
@@ -276,7 +290,7 @@ class Trainer(object):
                 ground_truth = labels
                 losses = model.losses(predictions, ground_truth)
                 for loss_name, loss_val in losses.items():
-                    tf.summary.scalar(loss_name, loss_val)
+                    tf.summary.scalar('loss/' + loss_name, loss_val)
                 loss = losses['heatmap_loss']
                 loss += train_cfg.bbox_clf_weight * losses['bbox_clf_loss']
                 loss += train_cfg.bbox_reg_weight * losses['bbox_reg_loss']
@@ -292,13 +306,14 @@ class Trainer(object):
 
         return model_fn
 
-    def input_fn(self):
-        """Create input graph for model.
-        """
-        # TODO : add multi-gpu training
-        with tf.device('/cpu:0'):
-            dataset = self.get_features_labels_data()
-            return dataset
+    # @staticmethod
+    # def input_fn():
+    #     """Create input graph for model.
+    #     """
+    #     # TODO : add multi-gpu training
+    #     with tf.device('/cpu:0'):
+    #         dataset = Trainer.get_features_labels_data()
+    #         return dataset
 
 
 if __name__ == '__main__':
