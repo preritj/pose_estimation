@@ -5,12 +5,12 @@
 * Currently supports COCO, MPI and PoseTrack datasets, however adding custom dataset is fairly easy. 
  
 
-* For single GPU training: 
+* For single GPU training, simply run: 
 ```
 python3 train.py
 ``` 
  
-* For distributed training: 
+* For distributed training, first install [horovod](https://github.com/uber/horovod). Then run: 
 ```
 mpirun -np 16 \
     -H server1:4,server2:4,server3:4,server4:4 \
