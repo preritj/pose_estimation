@@ -1,4 +1,5 @@
 import os
+import glob
 import numpy as np
 from dataset.coco import COCO
 from dataset.mpii import MPII
@@ -8,9 +9,8 @@ import tensorflow as tf
 import functools
 from utils.dataset_util import (
     normalize_bboxes, normalize_keypoints, random_crop,
-    random_flip_left_right, keypoints_to_heatmap,
-    keypoints_select, resize)
-from utils.bboxes import generate_anchors, get_matches
+    random_flip_left_right, keypoints_select, resize)
+
 
 slim_example_decoder = tf.contrib.slim.tfexample_decoder
 
@@ -29,12 +29,46 @@ class PoseDataReader(object):
             data_dir = params.pop('data_dir')
             params['img_dir'] = os.path.join(
                 data_dir, dataset['img_dir'])
-            params['tfrecord_path'] = os.path.join(
-                data_dir, dataset['tfrecord_path'])
             if 'annotation_files' in params.keys():
-                params['annotation_files'] = os.path.join(
-                    data_dir, dataset['annotation_files'])
-            self.add_dataset(**params)
+                ann_files = dataset['annotation_files']
+                if type(ann_files) is list:
+                    ann_files = [os.path.join(
+                        data_dir, f) for f in ann_files]
+                elif "*" in ann_files:
+                    ann_files = glob.glob(os.path.join(
+                        data_dir, ann_files))
+                else:
+                    ann_files = [os.path.join(
+                        data_dir, ann_files)]
+                tfrecord_dir = os.path.join(
+                    data_dir,
+                    os.path.dirname(dataset['tfrecord_files']))
+                tfrecord_files = []
+                for ann_file in ann_files:
+                    filename = os.path.basename(ann_file)
+                    filename = filename.split(".")[0] + ".records"
+                    tfrecord_files.append(os.path.join(
+                        tfrecord_dir, filename))
+            else:
+                params['annotation_files'] = None
+                tfrecord_files = dataset['tfrecord_files']
+                if type(tfrecord_files) is list:
+                    tfrecord_files = [os.path.join(
+                        data_dir, f) for f in tfrecord_files]
+                elif "*" in tfrecord_files:
+                    tfrecord_files = glob.glob(os.path.join(
+                        data_dir, tfrecord_files))
+                else:
+                    tfrecord_files = [os.path.join(
+                        data_dir, tfrecord_files)]
+                ann_files = [None] * len(tfrecord_files)
+
+            params.pop('tfrecord_files')
+            for ann_file, tf_file in zip(
+                    ann_files, tfrecord_files):
+                params['annotation_files'] = ann_file
+                params['tfrecord_path'] = tf_file
+                self.add_dataset(**params)
 
     def add_dataset(self, name, img_dir, tfrecord_path,
                     annotation_files=None, weight=1.,

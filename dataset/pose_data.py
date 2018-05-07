@@ -40,8 +40,6 @@ class PoseData(object):
                 annotation_files = [annotation_files]
             for ann_file in annotation_files:
                 dataset = json.load(open(ann_file, 'r'))
-                #assert type(dataset) == (dict or list), \
-                #    'annotation file format {} not supported'.format(type(dataset))
                 self.datasets.append(dataset)
             print('Done (t={:0.2f}s)'.format(time.time() - tic))
             self.create_index()
@@ -49,6 +47,9 @@ class PoseData(object):
     @abstractmethod
     def create_index(self):
         return
+
+    def get_size(self):
+        return len(self.ids)
 
     def _create_tf_example(self, img_id):
         img_meta = self.imgs[img_id]

@@ -202,7 +202,7 @@ class Trainer(object):
             opt_params.pop('learning_rate', None)
 
             def optimizer_fn(lr):
-                opt = tf.train.AdamOptimizer(lr, **opt_params)
+                opt = tf.train.AdamOptimizer(lr)
                 return hvd.DistributedOptimizer(opt)
 
         else:

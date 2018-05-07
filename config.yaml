@@ -14,7 +14,7 @@
 #  - name: coco
 #    data_dir: /media/storage/datasets/pose/coco
 #    img_dir: images/train2017
-#    tfrecord_path: tfrecords/train2017.records
+#    tfrecord_path: tfrecords/
 #    annotation_files: annotations/person_keypoints_train2017.json
 #  - name: coco
 #    data_dir: /media/storage/datasets/pose/coco
@@ -31,8 +31,8 @@ datasets:
   - name: ava
     data_dir: /media/easystore/TrainData
     img_dir: .
-    tfrecord_path: tfrecords/test.records
-    annotation_files: Annotations/test.json
+    tfrecord_files: tfrecords/ava*.records
+    annotation_files: Annotations/ava*.json
     weight: 1.
     overwrite_tfrecord: false
 
@@ -87,8 +87,8 @@ model_dir: './models'
 num_epochs: 0
 learning_rate: 0.001
 learning_rate_decay:
-  decay_steps: 3000
-  decay_rate: 0.95
+  decay_steps: 4000
+  decay_rate: 0.98
 
 batch_size: 32
 shuffle: true
