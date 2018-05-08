@@ -107,9 +107,11 @@ class Trainer(object):
             axis=0)
         heatmap_out = []
         for i in range(max_display):
+            image_i = tf.squeeze(images[i])
             heatmaps_i = tf.squeeze(heatmaps[i])
             out = tf.py_func(
-                vis.visualize_heatmaps, [heatmaps_i], tf.float32)
+                vis.visualize_heatmaps, [image_i, heatmaps_i],
+                tf.uint8)
             heatmap_out.append(tf.expand_dims(out, axis=0))
         bbox_clf_logits = predictions['bbox_clf_logits']
         _, bbox_probs = tf.split(
