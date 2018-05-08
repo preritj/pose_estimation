@@ -96,6 +96,14 @@ shuffle: true
 train_keypoints:
   - left_wrist
   - right_wrist
+#  - left_elbow
+#  - right_elbow
+#  - left_shoulder
+#  - right_shoulder
+#  - neck
+#  - nose
+#  - head
+
 
 augmentation:
   flip_left_right: true

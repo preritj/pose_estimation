@@ -8,6 +8,7 @@ from utils.parse_config import parse_config
 from utils.bboxes import (generate_anchors, get_matches,
                           bbox_decode)
 from utils.dataset_util import keypoints_to_heatmap
+import utils.visualize as vis
 
 slim = tf.contrib.slim
 
@@ -90,15 +91,26 @@ class Trainer(object):
     def prepare_tf_summary(self, features, predictions, max_display=3):
         all_anchors = self.generate_anchors()
         batch_size = self.train_cfg.batch_size
+        images = tf.cast(features['images'], tf.uint8)
         images = tf.split(
-            features['images'],
+            images,
             num_or_size_splits=batch_size,
             axis=0)
         heatmaps_logits = predictions['heatmaps']
         heatmaps = tf.nn.sigmoid(heatmaps_logits)
-        heatmap_out = tf.expand_dims(
-            tf.zeros_like(heatmaps[:, :, :, 0]), axis=-1)
-        heatmap_out = tf.concat([heatmap_out, heatmaps], -1)
+        # heatmap_out = tf.expand_dims(
+        #     tf.zeros_like(heatmaps[:, :, :, 0]), axis=-1)
+        # heatmap_out = tf.concat([heatmap_out, heatmaps], -1)
+        heatmaps = tf.split(
+            heatmaps,
+            num_or_size_splits=batch_size,
+            axis=0)
+        heatmap_out = []
+        for i in range(max_display):
+            heatmaps_i = tf.squeeze(heatmaps[i])
+            out = tf.py_func(
+                vis.visualize_heatmaps, [heatmaps_i], tf.float32)
+            heatmap_out.append(tf.expand_dims(out, axis=0))
         bbox_clf_logits = predictions['bbox_clf_logits']
         _, bbox_probs = tf.split(
             tf.nn.softmax(bbox_clf_logits),
@@ -116,14 +128,18 @@ class Trainer(object):
 
         for i in range(max_display):
             def _draw_bboxes():
+                img = tf.squeeze(images[i])
                 bboxes = tf.gather(bbox_regs[i], indices)
                 # bboxes = tf.zeros_like(bboxes)
                 anchors = tf.gather(all_anchors, indices)
                 bboxes = bbox_decode(
                     bboxes, anchors, self.model_cfg.scale_factors)
-                bboxes = tf.expand_dims(bboxes, axis=0)
-                return tf.image.draw_bounding_boxes(
-                    images[i], bboxes)
+                # bboxes = tf.expand_dims(bboxes, axis=0)
+                out_img = tf.py_func(vis.visualize_bboxes_on_image,
+                                     [img, bboxes], tf.uint8)
+                return tf.expand_dims(out_img, axis=0)
+                # return tf.image.draw_bounding_boxes(
+                #    images[i], bboxes)
 
             indices = tf.squeeze(tf.where(
                 tf.greater(bbox_probs[i], 0.5)))
@@ -134,6 +150,7 @@ class Trainer(object):
             out_images.append(out_image)
 
         out_images = tf.concat(out_images, axis=0)
+        heatmap_out = tf.concat(heatmap_out, axis=0)
         tf.summary.image('bboxes', out_images, max_display)
         tf.summary.image('heatmap', heatmap_out, max_display)
 

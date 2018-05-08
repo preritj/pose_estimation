@@ -24,6 +24,8 @@ class Trainer(object):
         self.hparams = tf.contrib.training.HParams(
             **self.model_cfg.__dict__,
             num_keypoints=len(self.train_cfg.train_keypoints))
+        self.cpu_device = '/cpu:0'
+        self.param_server_device = '/gpu:0'
 
     def generate_anchors(self):
         all_anchors = []
@@ -182,7 +184,7 @@ class Trainer(object):
             """Create input graph for model.
             """
             # TODO : add multi-gpu training
-            with tf.device('/cpu:0'):
+            with tf.device(self.cpu_device):
                 dataset = self.get_features_labels_data()
                 return dataset
 
@@ -287,7 +289,8 @@ class Trainer(object):
             # inputs = {'images': features}
             # predictions = model.predict(inputs, is_training=is_training)
             predictions = model.predict(features, is_training=is_training)
-            self.prepare_tf_summary(features, predictions)
+            with tf.device(self.cpu_device):
+                self.prepare_tf_summary(features, predictions)
             # Loss, training and eval operations are not needed during inference.
             loss = None
             train_op = None
@@ -302,13 +305,15 @@ class Trainer(object):
                 #                 'masks': masks}
                 ground_truth = labels
                 losses = model.losses(predictions, ground_truth)
-                for loss_name, loss_val in losses.items():
-                    tf.summary.scalar('loss/' + loss_name, loss_val)
-                loss = losses['heatmap_loss']
-                loss += train_cfg.bbox_clf_weight * losses['bbox_clf_loss']
-                loss += train_cfg.bbox_reg_weight * losses['bbox_reg_loss']
-                train_op = self.get_train_op(loss)
-                eval_metric_ops = None  # get_eval_metric_ops(labels, predictions)
+                with tf.device(self.cpu_device):
+                    for loss_name, loss_val in losses.items():
+                        tf.summary.scalar('loss/' + loss_name, loss_val)
+                with tf.device(self.param_server_device):
+                    loss = losses['heatmap_loss']
+                    loss += train_cfg.bbox_clf_weight * losses['bbox_clf_loss']
+                    loss += train_cfg.bbox_reg_weight * losses['bbox_reg_loss']
+                    train_op = self.get_train_op(loss)
+                    eval_metric_ops = None  # get_eval_metric_ops(labels, predictions)
             return tf.estimator.EstimatorSpec(
                 mode=mode,
                 predictions=predictions,
