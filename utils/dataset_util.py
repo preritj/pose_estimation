@@ -295,7 +295,7 @@ def keypoints_to_vectormap(image, keypoints, bboxes, mask,
                            num_keypoints=15,
                            grid_shape=(28, 28),
                            window_size=3):
-    """Vector-map generation"""
+    """Heatmap generation"""
     n = window_size * window_size
     keypoints = tf.clip_by_value(keypoints,
                                  clip_value_min=0.,
@@ -325,8 +325,16 @@ def keypoints_to_vectormap(image, keypoints, bboxes, mask,
     x_indices, y_indices = [], []
     for i in range(-delta, delta + 1):
         for j in range(-delta, delta + 1):
-            x_indices.append(center_x_indices + i)
-            y_indices.append(center_y_indices + j)
+            new_x_indices = tf.clip_by_value(
+                center_x_indices + i,
+                clip_value_min=0,
+                clip_value_max=grid_shape[1] - 1)
+            new_y_indices = tf.clip_by_value(
+                center_y_indices + j,
+                clip_value_min=0,
+                clip_value_max=grid_shape[0] - 1)
+            x_indices.append(new_x_indices)
+            y_indices.append(new_y_indices)
     x_indices = tf.reshape(tf.transpose(
         tf.concat(x_indices, axis=1), [0, 1]), [-1, 1])
     y_indices = tf.reshape(tf.transpose(
@@ -335,10 +343,11 @@ def keypoints_to_vectormap(image, keypoints, bboxes, mask,
     indices = tf.to_int64(tf.concat(
         [n_indices, kp_indices, y_indices, x_indices],
         axis=1))
+
     keypoints_vis = tf.squeeze(keypoints_vis, [1])
     keypoints_vis = tf.reshape(tf.tile(
         tf.reshape(keypoints_vis, [-1, 1]),
-        [1, n]), -1)
+        [1, n]), [-1])
     values = tf.cast(tf.greater(keypoints_vis, 0.), tf.int32)
     dense_shape = tf.to_int64(tf.concat(
         [tf.shape(keypoints)[:2], grid_shape_], axis=0))
