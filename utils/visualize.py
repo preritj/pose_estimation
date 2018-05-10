@@ -21,7 +21,9 @@ def visualize_bboxes_on_image(image, boxes):
     return image
 
 
-def visualize_heatmaps(image, heatmaps):
+def visualize_heatmaps(image, heatmaps, threshold=0.2):
+    heatmaps[heatmaps > threshold] = 1.
+    heatmaps[heatmaps <= threshold] = 0.
     img_h, img_w, _ = image.shape
     h, w, num_keypoints = heatmaps.shape
     out_img = np.zeros((h, w, 3))

@@ -87,7 +87,7 @@ model_dir: './models'
 num_epochs: 0
 learning_rate: 0.001
 learning_rate_decay:
-  decay_steps: 6000
+  decay_steps: 3000
   decay_rate: 0.98
 
 batch_size: 32
@@ -95,6 +95,7 @@ shuffle: true
 
 train_keypoints:
   - left_wrist
+  - head
   - right_wrist
 #  - left_elbow
 #  - right_elbow
@@ -121,9 +122,9 @@ optimizer:
     epsilon: 1e-8
 
 filenames_shuffle_buffer_size: 100
-num_parallel_map_calls: 8  # ~ num of CPU cores or less
-num_readers: 8
-read_block_length: 32
+num_parallel_map_calls: 12  # ~ num of CPU cores or less
+num_readers: 32
+read_block_length: 64
 shuffle_buffer_size: 2048
 prefetch_size: 64  # ~ 2 x batch-size
 

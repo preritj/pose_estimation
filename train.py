@@ -8,6 +8,7 @@ from utils.parse_config import parse_config
 from utils.bboxes import (generate_anchors, get_matches,
                           bbox_decode)
 from utils.dataset_util import keypoints_to_heatmap
+from utils.ops import non_max_suppression
 import utils.visualize as vis
 
 slim = tf.contrib.slim
@@ -98,6 +99,7 @@ class Trainer(object):
             axis=0)
         heatmaps_logits = predictions['heatmaps']
         heatmaps = tf.nn.sigmoid(heatmaps_logits)
+        heatmaps = non_max_suppression(heatmaps, 3)
         # heatmap_out = tf.expand_dims(
         #     tf.zeros_like(heatmaps[:, :, :, 0]), axis=-1)
         # heatmap_out = tf.concat([heatmap_out, heatmaps], -1)
@@ -110,7 +112,7 @@ class Trainer(object):
             image_i = tf.squeeze(images[i])
             heatmaps_i = tf.squeeze(heatmaps[i])
             out = tf.py_func(
-                vis.visualize_heatmaps, [image_i, heatmaps_i],
+                vis.visualize_heatmaps, [image_i, heatmaps_i, 0.2],
                 tf.uint8)
             heatmap_out.append(tf.expand_dims(out, axis=0))
         bbox_clf_logits = predictions['bbox_clf_logits']
@@ -129,6 +131,9 @@ class Trainer(object):
         out_images = []
 
         for i in range(max_display):
+            indices = tf.squeeze(tf.where(
+                tf.greater(bbox_probs[i], 0.5)))
+
             def _draw_bboxes():
                 img = tf.squeeze(images[i])
                 bboxes = tf.gather(bbox_regs[i], indices)
@@ -137,14 +142,18 @@ class Trainer(object):
                 bboxes = bbox_decode(
                     bboxes, anchors, self.model_cfg.scale_factors)
                 # bboxes = tf.expand_dims(bboxes, axis=0)
+                scores = tf.gather(bbox_probs[i], indices)
+                selected_indices = tf.image.non_max_suppression(
+                    bboxes, scores,
+                    max_output_size=10,
+                    iou_threshold=0.5)
+                bboxes = tf.gather(bboxes, selected_indices)
                 out_img = tf.py_func(vis.visualize_bboxes_on_image,
                                      [img, bboxes], tf.uint8)
                 return tf.expand_dims(out_img, axis=0)
                 # return tf.image.draw_bounding_boxes(
                 #    images[i], bboxes)
 
-            indices = tf.squeeze(tf.where(
-                tf.greater(bbox_probs[i], 0.5)))
             out_image = tf.cond(
                 tf.greater(tf.rank(indices), 0),
                 true_fn=_draw_bboxes,
