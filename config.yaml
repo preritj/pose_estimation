@@ -87,7 +87,7 @@ model_dir: './models'
 num_epochs: 0
 learning_rate: 0.001
 learning_rate_decay:
-  decay_steps: 3000
+  decay_steps: 4000
   decay_rate: 0.98
 
 batch_size: 32
