@@ -28,6 +28,7 @@ class TrainConfig(yaml.YAMLObject):
                  train_keypoints=None,
                  train_skeletons=None,
                  window_size=3,
+                 vector_scale=20,
                  shuffle=True,
                  filenames_shuffle_buffer_size=100,
                  num_parallel_map_calls=2,
@@ -55,6 +56,7 @@ class TrainConfig(yaml.YAMLObject):
             train_skeletons = ['head', 'nose']
         self.train_skeletons = train_skeletons
         self.window_size = window_size
+        self.vector_scale = vector_scale
         self.model_dir = model_dir
         self.shuffle = shuffle
         self.filenames_shuffle_buffer_size = filenames_shuffle_buffer_size

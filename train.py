@@ -60,7 +60,8 @@ class Trainer(object):
             keypoints_to_heatmaps_and_vectors,
             pairs=pairs,
             grid_shape=model_cfg.output_shape,
-            window_size=train_cfg.window_size
+            window_size=train_cfg.window_size,
+            vector_scale=train_cfg.vector_scale
         )
 
         def heatmap_fn(image, keypoints, bboxes, mask):
@@ -118,6 +119,7 @@ class Trainer(object):
             num_or_size_splits=batch_size,
             axis=0)
         heatmaps_logits = predictions['heatmaps']
+        vecmaps = predictions['vecmaps'] * self.train_cfg.vector_scale
         heatmaps = tf.nn.sigmoid(heatmaps_logits)
         heatmaps = non_max_suppression(heatmaps, 3)
         # heatmap_out = tf.expand_dims(

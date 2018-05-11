@@ -368,7 +368,8 @@ def keypoints_to_heatmaps_and_vectors(
         keypoints,
         pairs=([0, 1], [1, 2]),
         grid_shape=(28, 28),
-        window_size=3):
+        window_size=3,
+        vector_scale=20.):
     num_instances, num_keypoints, _ = keypoints.shape
     n_vec = 4 * len(pairs)
     grid_shape = np.array(list(grid_shape))
@@ -413,5 +414,5 @@ def keypoints_to_heatmaps_and_vectors(
         instance_vecmap[select_y_indices.flatten(), select_x_indices.flatten(),
                         vec_indices.flatten()] = np.array(values).T.flatten()
         overwrite = vecmap == 0
-        vecmap[overwrite] = instance_vecmap[overwrite] / 20.
+        vecmap[overwrite] = instance_vecmap[overwrite] / vector_scale
     return np.float32(heatmap), np.float32(vecmap)

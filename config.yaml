@@ -110,6 +110,7 @@ train_skeletons:
   - [right_wrist, head]
 
 window_size: 3
+vector_scale: 20
 
 augmentation:
   flip_left_right: true
