@@ -105,6 +105,11 @@ train_keypoints:
 #  - nose
 #  - head
 
+train_skeletons:
+  - [left_wrist, head]
+  - [right_wrist, head]
+
+window_size: 3
 
 augmentation:
   flip_left_right: true
@@ -128,6 +133,7 @@ read_block_length: 64
 shuffle_buffer_size: 2048
 prefetch_size: 64  # ~ 2 x batch-size
 
+vecmap_loss_weight: 1.
 bbox_clf_weight: 2.
 bbox_reg_weight: 3.
 

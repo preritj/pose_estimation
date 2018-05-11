@@ -91,10 +91,13 @@ class MobilenetPose(Model):
                     stride=1,
                     expand_ratio=6,
                     scope='InvertedResidual_final')
-            net = slim.conv2d(net, self._num_keypoints, [1, 1],
-                              activation_fn=None, normalizer_fn=None,
-                              normalizer_params=None, scope='heatmap')
-        return net, fpn_layers
+            heatmap = slim.conv2d(net, self._num_keypoints, [1, 1],
+                                  activation_fn=None, normalizer_fn=None,
+                                  normalizer_params=None, scope='heatmap')
+            vecmap = slim.conv2d(net, self._num_vecs, [1, 1],
+                                 activation_fn=None, normalizer_fn=None,
+                                 normalizer_params=None, scope='vecmap')
+        return heatmap, vecmap, fpn_layers
 
     def bbox_clf_reg_net(self, fpn_features, is_training=False, scope=None):
         """Builds bbox classifier and regressor"""

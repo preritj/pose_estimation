@@ -26,6 +26,8 @@ class TrainConfig(yaml.YAMLObject):
                  is_training=False,
                  model_dir=None,
                  train_keypoints=None,
+                 train_skeletons=None,
+                 window_size=3,
                  shuffle=True,
                  filenames_shuffle_buffer_size=100,
                  num_parallel_map_calls=2,
@@ -40,14 +42,19 @@ class TrainConfig(yaml.YAMLObject):
                  optimizer=None,
                  augmentation=None,
                  preprocess=None,
+                 vecmap_loss_weight=1.,
                  bbox_clf_weight=1.,
                  bbox_reg_weight=1.):
         self.is_training = is_training
         if model_dir is None:
             model_dir = './models'
         if train_keypoints is None:
-            train_keypoints = ['nose']
+            train_keypoints = ['head', 'nose']
         self.train_keypoints = train_keypoints
+        if train_skeletons is None:
+            train_skeletons = ['head', 'nose']
+        self.train_skeletons = train_skeletons
+        self.window_size = window_size
         self.model_dir = model_dir
         self.shuffle = shuffle
         self.filenames_shuffle_buffer_size = filenames_shuffle_buffer_size
@@ -65,6 +72,7 @@ class TrainConfig(yaml.YAMLObject):
         self.optimizer = optimizer
         self.augmentation = augmentation
         self.preprocess = preprocess
+        self.vecmap_loss_weight = vecmap_loss_weight
         self.bbox_clf_weight = bbox_clf_weight
         self.bbox_reg_weight = bbox_reg_weight
 

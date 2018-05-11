@@ -7,7 +7,7 @@ from dataset.data_reader import PoseDataReader
 from utils.parse_config import parse_config
 from utils.bboxes import (generate_anchors, get_matches,
                           bbox_decode)
-from utils.dataset_util import keypoints_to_heatmap
+from utils.dataset_util import keypoints_to_heatmaps_and_vectors
 from utils.ops import non_max_suppression
 import utils.visualize as vis
 
@@ -24,7 +24,8 @@ class Trainer(object):
         self.model_cfg = cfg['model_config']
         self.hparams = tf.contrib.training.HParams(
             **self.model_cfg.__dict__,
-            num_keypoints=len(self.train_cfg.train_keypoints))
+            num_keypoints=len(self.train_cfg.train_keypoints),
+            num_vecs=4 * len(self.train_cfg.train_skeletons))
 
     def generate_anchors(self):
         all_anchors = []
@@ -47,20 +48,38 @@ class Trainer(object):
         model_cfg = self.model_cfg
         train_cfg = self.train_cfg
         anchors = self.generate_anchors()
-        num_keypoints = len(train_cfg.train_keypoints)
+        # num_keypoints = len(train_cfg.train_keypoints)
         data_reader = PoseDataReader(self.data_cfg)
         dataset = data_reader.read_data(train_cfg)
-        heatmap_fn = functools.partial(
-            keypoints_to_heatmap,
-            num_keypoints=num_keypoints,
-            grid_shape=model_cfg.output_shape)
+
+        kp_dict = {kp: i for i, kp in enumerate(train_cfg.train_keypoints)}
+        pairs = [[kp_dict[kp1], kp_dict[kp2]]
+                 for kp1, kp2 in train_cfg.train_skeletons]
+
+        _heatmpa_fn = functools.partial(
+            keypoints_to_heatmaps_and_vectors,
+            pairs=pairs,
+            grid_shape=model_cfg.output_shape,
+            window_size=train_cfg.window_size
+        )
+
+        def heatmap_fn(image, keypoints, bboxes, mask):
+            heatmaps, vecmaps = tf.py_func(_heatmpa_fn, [keypoints],
+                                           [tf.float32, tf.float32])
+            return image, heatmaps, vecmaps, bboxes, mask
+
+        # heatmap_fn = functools.partial(
+        #     keypoints_to_heatmaps_and_vectors,
+        #     num_keypoints=num_keypoints,
+        #     grid_shape=model_cfg.output_shape)
+
         dataset = dataset.map(
             heatmap_fn,
             num_parallel_calls=train_cfg.num_parallel_map_calls
         )
         dataset = dataset.prefetch(train_cfg.prefetch_size)
 
-        def map_fn(images, heatmaps, bboxes, masks):
+        def map_fn(images, heatmaps, vecmaps, bboxes, masks):
             features = {'images': images}
             classes, regs, weights = get_matches(
                 gt_bboxes=bboxes,
@@ -78,6 +97,7 @@ class Trainer(object):
                 masks, size=model_cfg.output_shape)
             masks = tf.squeeze(masks)
             labels = {'heatmaps': heatmaps,
+                      'vecmaps': vecmaps,
                       'masks': masks,
                       'bboxes': bbox_labels}
             return features, labels
@@ -320,6 +340,7 @@ class Trainer(object):
                 for loss_name, loss_val in losses.items():
                     tf.summary.scalar('loss/' + loss_name, loss_val)
                 loss = losses['heatmap_loss']
+                loss += train_cfg.vecmap_loss_weight * losses['vecmap_loss']
                 loss += train_cfg.bbox_clf_weight * losses['bbox_clf_loss']
                 loss += train_cfg.bbox_reg_weight * losses['bbox_reg_loss']
                 train_op = self.get_train_op(loss)

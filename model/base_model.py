@@ -5,10 +5,14 @@ from abc import abstractmethod
 import tensorflow as tf
 
 
+EPSILON = 1e-7
+
+
 class Model:
     def __init__(self, model_cfg):
         self.cfg = model_cfg
         self._num_keypoints = self.cfg.num_keypoints
+        self._num_vecs = self.cfg.num_vecs
         self.check_output_shape()
 
     @abstractmethod
@@ -34,11 +38,12 @@ class Model:
     def predict(self, inputs, is_training=False):
         images = inputs['images']
         preprocessed_inputs = self.preprocess(images)
-        heatmaps, fpn_features = self.build_net(
+        heatmaps, vecmaps, fpn_features = self.build_net(
             preprocessed_inputs, is_training=is_training)
         bbox_clf_logits, bbox_regs = self.bbox_clf_reg_net(
             fpn_features, is_training)
         prediction = {'heatmaps': heatmaps,
+                      'vecmaps': vecmaps,
                       'bbox_clf_logits': bbox_clf_logits,
                       'bbox_regs': bbox_regs}
         return prediction
@@ -47,13 +52,27 @@ class Model:
         logits = tf.reshape(logits, [-1, self._num_keypoints])
         labels = tf.reshape(labels, [-1, self._num_keypoints])
         weights = tf.reshape(weights, [-1])
-        heatmap_loss = tf.losses.sigmoid_cross_entropy(
-            multi_class_labels=labels,
-            logits=logits,
-            reduction=tf.losses.Reduction.NONE)
+        heatmap_loss = tf.nn.sigmoid_cross_entropy_with_logits(
+            labels=labels,
+            logits=logits
+        )
+        # heatmap_loss = tf.losses.sigmoid_cross_entropy(
+        #     multi_class_labels=labels,
+        #     logits=logits,
+        #     reduction=tf.losses.Reduction.NONE)
         heatmap_loss = tf.reduce_sum(heatmap_loss, axis=-1)
         heatmap_loss = tf.reduce_mean(heatmap_loss * weights)
         return heatmap_loss
+
+    def vecmap_loss(self, regs_gt, regs_pred):
+        weights = tf.cast(tf.greater(tf.abs(regs_gt), EPSILON),
+                          tf.float32)
+        vecmap_loss = tf.losses.huber_loss(
+            labels=regs_gt,
+            predictions=regs_pred,
+            weights=weights,
+            delta=1.)
+        return vecmap_loss
 
     def bbox_clf_reg_loss(self, clf_labels, clf_logits,
                           clf_weights, regs_gt, regs_pred):
@@ -88,9 +107,11 @@ class Model:
 
     def losses(self, prediction, ground_truth):
         heatmaps_logits = prediction['heatmaps']
+        vecmaps_regs = prediction['vecmaps']
         bbox_clf_logits = prediction['bbox_clf_logits']
         bbox_regs_pred = prediction['bbox_regs']
         heatmaps_gt = ground_truth['heatmaps']
+        vecmaps_regs_gt = ground_truth['vecmaps']
         bbox_clf_gt = ground_truth['bboxes']['classes']
         bbox_regs_gt = ground_truth['bboxes']['regs']
         bbox_weights = ground_truth['bboxes']['weights']
@@ -101,6 +122,11 @@ class Model:
             logits=heatmaps_logits,
             weights=mask_weights)
 
+        vecmap_loss = self.vecmap_loss(
+            regs_gt=vecmaps_regs_gt,
+            regs_pred=vecmaps_regs
+        )
+
         bbox_clf_loss, bbox_reg_loss = self.bbox_clf_reg_loss(
             clf_labels=bbox_clf_gt,
             clf_logits=bbox_clf_logits,
@@ -109,6 +135,7 @@ class Model:
             regs_pred=bbox_regs_pred)
 
         losses = {'heatmap_loss': heatmap_loss,
+                  'vecmap_loss': vecmap_loss,
                   'bbox_clf_loss': bbox_clf_loss,
                   'bbox_reg_loss': bbox_reg_loss}
         # l2_loss = tf.losses.mean_squared_error(

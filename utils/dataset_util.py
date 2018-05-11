@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 
 
 def random_int(maxval, minval=0):
@@ -291,7 +292,7 @@ def keypoints_to_heatmap(image, keypoints, bboxes, mask,
     return image, heatmap, bboxes, mask
 
 
-def keypoints_to_vectormap(image, keypoints, bboxes, mask,
+def keypoints_to_heatmap_v2(image, keypoints, bboxes, mask,
                            num_keypoints=15,
                            grid_shape=(28, 28),
                            window_size=3):
@@ -361,3 +362,56 @@ def keypoints_to_vectormap(image, keypoints, bboxes, mask,
     heatmap = tf.sparse_transpose(heatmap, [1, 2, 0])
     heatmap = tf.sparse_tensor_to_dense(heatmap)
     return image, heatmap, bboxes, mask
+
+
+def keypoints_to_heatmaps_and_vectors(
+        keypoints,
+        pairs=([0, 1], [1, 2]),
+        grid_shape=(28, 28),
+        window_size=3):
+    num_instances, num_keypoints, _ = keypoints.shape
+    n_vec = 4 * len(pairs)
+    grid_shape = np.array(list(grid_shape))
+    n = window_size * window_size
+    delta = int((window_size - 1) / 2)
+    keypoints_vis = keypoints[:, :, 2]
+    keypoints_indices = (keypoints[:, :, :2] * grid_shape).astype(np.uint16)
+    x_center_indices, y_center_indices = keypoints_indices.transpose((2, 0, 1))
+    x_mesh, y_mesh = np.meshgrid(np.arange(-delta, 1 + delta),
+                                 np.arange(-delta, 1 + delta))
+    x_mesh, y_mesh = x_mesh.reshape((-1, 1)), y_mesh.reshape((-1, 1))
+    heatmap = np.zeros((grid_shape[0], grid_shape[1], num_keypoints))
+    vecmap = np.zeros((grid_shape[0], grid_shape[1], n_vec))
+    for i in range(num_instances):
+        instance_heatmap = np.zeros((grid_shape[0], grid_shape[1], num_keypoints))
+        instance_vecmap = np.zeros((grid_shape[0], grid_shape[1], n_vec))
+        kp_vis = keypoints_vis[i]
+        values = np.tile(kp_vis, int((n - 1) / 2)) * 0.5
+        values = np.concatenate([values, kp_vis, values])
+        kp_indices = np.repeat(np.expand_dims(np.arange(num_keypoints), 0),
+                               n, axis=0)
+        vec_indices = np.repeat(np.expand_dims(np.arange(n_vec), 0), n, axis=0)
+        x_indices = (x_center_indices[i] + x_mesh).clip(0, grid_shape[1] - 1)
+        y_indices = (y_center_indices[i] + y_mesh).clip(0, grid_shape[0] - 1)
+        instance_heatmap[y_indices.flatten(), x_indices.flatten(),
+                         kp_indices.flatten()] = values
+        heatmap = np.maximum(heatmap, instance_heatmap)
+
+        select_x_indices, select_y_indices, values = [], [], []
+        for kp1, kp2 in pairs:
+            select_x_indices += 2 * [x_indices[:, kp1]] + 2 * [x_indices[:, kp2]]
+            select_y_indices += 2 * [y_indices[:, kp1]] + 2 * [y_indices[:, kp2]]
+            if (kp_vis[kp1] == 0) or (kp_vis[kp2] == 0):
+                values += 4 * [np.zeros_like(x_indices[:, kp1])]
+            else:
+                values += [x_center_indices[i, kp2] - x_indices[:, kp1],
+                           y_center_indices[i, kp2] - y_indices[:, kp1],
+                           x_center_indices[i, kp1] - x_indices[:, kp2],
+                           y_center_indices[i, kp1] - y_indices[:, kp2]]
+        select_x_indices = np.array(select_x_indices).T
+        select_y_indices = np.array(select_y_indices).T
+        instance_vecmap[select_y_indices.flatten(), select_x_indices.flatten(),
+                        vec_indices.flatten()] = np.array(values).T.flatten()
+        overwrite = vecmap == 0
+        vecmap[overwrite] = instance_vecmap[overwrite] / 20.
+    return np.float32(heatmap), np.float32(vecmap)
