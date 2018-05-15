@@ -5,7 +5,7 @@ from abc import abstractmethod
 import tensorflow as tf
 
 
-EPSILON = 1e-7
+EPSILON = 1e-5
 
 
 class Model:
@@ -67,11 +67,11 @@ class Model:
     def vecmap_loss(self, regs_gt, regs_pred):
         weights = tf.cast(tf.greater(tf.abs(regs_gt), EPSILON),
                           tf.float32)
-        vecmap_loss = tf.losses.huber_loss(
+        weights /= tf.maximum(EPSILON, tf.abs(regs_gt))
+        vecmap_loss = tf.losses.absolute_difference(
             labels=regs_gt,
             predictions=regs_pred,
-            weights=weights,
-            delta=1.)
+            weights=weights)
         return vecmap_loss
 
     def bbox_clf_reg_loss(self, clf_labels, clf_logits,

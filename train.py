@@ -26,6 +26,10 @@ class Trainer(object):
             **self.model_cfg.__dict__,
             num_keypoints=len(self.train_cfg.train_keypoints),
             num_vecs=4 * len(self.train_cfg.train_skeletons))
+        kp_dict = {kp: i for i, kp in
+                   enumerate(self.train_cfg.train_keypoints)}
+        self.pairs = [[kp_dict[kp1], kp_dict[kp2]] for kp1, kp2
+                      in self.train_cfg.train_skeletons]
 
     def generate_anchors(self):
         all_anchors = []
@@ -52,13 +56,9 @@ class Trainer(object):
         data_reader = PoseDataReader(self.data_cfg)
         dataset = data_reader.read_data(train_cfg)
 
-        kp_dict = {kp: i for i, kp in enumerate(train_cfg.train_keypoints)}
-        pairs = [[kp_dict[kp1], kp_dict[kp2]]
-                 for kp1, kp2 in train_cfg.train_skeletons]
-
         _heatmpa_fn = functools.partial(
             keypoints_to_heatmaps_and_vectors,
-            pairs=pairs,
+            pairs=self.pairs,
             grid_shape=model_cfg.output_shape,
             window_size=train_cfg.window_size,
             vector_scale=train_cfg.vector_scale
@@ -119,7 +119,7 @@ class Trainer(object):
             num_or_size_splits=batch_size,
             axis=0)
         heatmaps_logits = predictions['heatmaps']
-        vecmaps = predictions['vecmaps'] * self.train_cfg.vector_scale
+        vecmaps = predictions['vecmaps']  # * self.train_cfg.vector_scale
         heatmaps = tf.nn.sigmoid(heatmaps_logits)
         heatmaps = non_max_suppression(heatmaps, 3)
         # heatmap_out = tf.expand_dims(
@@ -129,12 +129,24 @@ class Trainer(object):
             heatmaps,
             num_or_size_splits=batch_size,
             axis=0)
+        vecmaps = tf.split(
+            vecmaps,
+            num_or_size_splits=batch_size,
+            axis=0)
         heatmap_out = []
+
+        heatmap_vis_fn = functools.partial(
+            vis.visualize_heatmaps,
+            pairs=self.pairs,
+            threshold=0.2)
+
         for i in range(max_display):
             image_i = tf.squeeze(images[i])
             heatmaps_i = tf.squeeze(heatmaps[i])
+            vecmaps_i = tf.squeeze(vecmaps[i])
             out = tf.py_func(
-                vis.visualize_heatmaps, [image_i, heatmaps_i, 0.2],
+                heatmap_vis_fn,
+                [image_i, heatmaps_i, vecmaps_i],
                 tf.uint8)
             heatmap_out.append(tf.expand_dims(out, axis=0))
         bbox_clf_logits = predictions['bbox_clf_logits']

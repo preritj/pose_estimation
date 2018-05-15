@@ -85,16 +85,22 @@ class MobilenetPose(Model):
                     net = ops.nearest_neighbor_upsampling(net, 2)
                     skip_layer = self._skip_layers[i]
                     net = tf.concat([net, image_features[skip_layer]], -1)
-                net = inverted_residual_bottleneck(
+                heatmap_branch = inverted_residual_bottleneck(
                     net,
                     depth=64,
                     stride=1,
                     expand_ratio=6,
-                    scope='InvertedResidual_final')
-            heatmap = slim.conv2d(net, self._num_keypoints, [1, 1],
+                    scope='InvertedResidual_heatmap')
+                vecmap_branch = inverted_residual_bottleneck(
+                    net,
+                    depth=64,
+                    stride=1,
+                    expand_ratio=6,
+                    scope='InvertedResidual_vecmap')
+            heatmap = slim.conv2d(heatmap_branch, self._num_keypoints, [1, 1],
                                   activation_fn=None, normalizer_fn=None,
                                   normalizer_params=None, scope='heatmap')
-            vecmap = slim.conv2d(net, self._num_vecs, [1, 1],
+            vecmap = slim.conv2d(vecmap_branch, self._num_vecs, [1, 1],
                                  activation_fn=None, normalizer_fn=None,
                                  normalizer_params=None, scope='vecmap')
         return heatmap, vecmap, fpn_layers

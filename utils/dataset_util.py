@@ -414,5 +414,5 @@ def keypoints_to_heatmaps_and_vectors(
         instance_vecmap[select_y_indices.flatten(), select_x_indices.flatten(),
                         vec_indices.flatten()] = np.array(values).T.flatten()
         overwrite = vecmap == 0
-        vecmap[overwrite] = instance_vecmap[overwrite] / vector_scale
+        vecmap[overwrite] = instance_vecmap[overwrite]
     return np.float32(heatmap), np.float32(vecmap)

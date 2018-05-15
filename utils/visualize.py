@@ -21,11 +21,13 @@ def visualize_bboxes_on_image(image, boxes):
     return image
 
 
-def visualize_heatmaps(image, heatmaps, threshold=0.2):
+def visualize_heatmaps(image, heatmaps, vecmaps,
+                       pairs=([0, 1], [1, 2]), threshold=0.2):
     heatmaps[heatmaps > threshold] = 1.
     heatmaps[heatmaps <= threshold] = 0.
     img_h, img_w, _ = image.shape
     h, w, num_keypoints = heatmaps.shape
+    scale_h, scale_w = int(img_h / h), int(img_w / w)
     out_img = np.zeros((h, w, 3))
     colors = cm.jet(np.linspace(0, 1, num_keypoints))
     for i in range(num_keypoints):
@@ -38,5 +40,22 @@ def visualize_heatmaps(image, heatmaps, threshold=0.2):
                          interpolation=cv2.INTER_NEAREST)
     out_img = (255. * out_img).astype(np.uint8)
     out_img = cv2.addWeighted(out_img, .9, image, 0.1, 0)
+    for i, (kp1, kp2) in enumerate(pairs):
+        y_indices_1, x_indices_1 = heatmaps[:, :, kp1].nonzero()
+        for x, y in zip(x_indices_1, y_indices_1):
+            x0, y0 = scale_w * x, scale_h * y
+            delta_x = scale_w * int(vecmaps[x, y, 4 * i])
+            delta_y = scale_h * int(vecmaps[x, y, 4 * i + 1])
+            out_img = cv2.line(out_img, (x0, y0),
+                               (x0 + delta_x, y0 + delta_y),
+                               (0, 255, 0), 1)
+        y_indices_2, x_indices_2 = heatmaps[:, :, kp2].nonzero()
+        for x, y in zip(x_indices_2, y_indices_2):
+            x0, y0 = scale_w * x, scale_h * y
+            delta_x = scale_w * int(vecmaps[x, y, 4 * i + 2])
+            delta_y = scale_h * int(vecmaps[x, y, 4 * i + 3])
+            out_img = cv2.line(out_img, (x0, y0),
+                               (x0 + delta_x, y0 + delta_y),
+                               (0, 255, 0), 1)
     return out_img
 
