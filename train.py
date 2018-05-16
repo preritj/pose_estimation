@@ -10,6 +10,13 @@ from utils.bboxes import (generate_anchors, get_matches,
 from utils.dataset_util import keypoints_to_heatmaps_and_vectors
 from utils.ops import non_max_suppression
 import utils.visualize as vis
+try:
+    import horovod.tensorflow as hvd
+    print("Found horovod module, will use distributed training")
+    use_hvd = True
+except ImportError:
+    print("Horovod module not found, will not use distributed training")
+    use_hvd = False
 
 slim = tf.contrib.slim
 
@@ -30,6 +37,8 @@ class Trainer(object):
                    enumerate(self.train_cfg.train_keypoints)}
         self.pairs = [[kp_dict[kp1], kp_dict[kp2]] for kp1, kp2
                       in self.train_cfg.train_skeletons]
+        self.cpu_device = '/cpu:0'
+        self.param_server_device = '/gpu:0'
 
     def generate_anchors(self):
         all_anchors = []
@@ -201,13 +210,17 @@ class Trainer(object):
 
     def train(self):
         """run training experiment"""
-        session_config = tf.ConfigProto(
-            allow_soft_placement=True  # ,
-            # log_device_placement=False,
-            # gpu_options=tf.GPUOptions(
-            #     force_gpu_compatible=True,
-            #     allow_growth=True)
-        )
+        if use_hvd:
+            hvd.init()
+            session_config = tf.ConfigProto(
+                gpu_options=tf.GPUOptions(
+                    allow_growth=True,
+                    visible_device_list=str(hvd.local_rank())
+                ))
+        else:
+            session_config = tf.ConfigProto(
+                allow_soft_placement=True
+            )
 
         if not os.path.exists(self.train_cfg.model_dir):
             os.makedirs(self.train_cfg.model_dir)
@@ -219,8 +232,14 @@ class Trainer(object):
             os.makedirs(model_path)
         self.hparams.model_dir = model_path
 
+        model_dir = model_path
+        if use_hvd and (hvd.rank() != 0):
+            # Horovod: save checkpoints only on worker 0
+            # to prevent other workers from corrupting them.
+            model_dir = None
+
         run_config = tf.contrib.learn.RunConfig(
-            model_dir=self.train_cfg.model_dir,
+            model_dir=model_dir,
             session_config=session_config
         )
 
@@ -230,16 +249,26 @@ class Trainer(object):
             config=run_config  # RunConfig
         )
 
+        hooks = None
+        if use_hvd:
+            # Horovod: BroadcastGlobalVariablesHook broadcasts initial variable states from
+            # rank 0 to all other processes. This is necessary to ensure consistent
+            # initialization of all workers when training is started with random weights or
+            # restored from a checkpoint.
+            bcast_hook = hvd.BroadcastGlobalVariablesHook(0)
+            hooks = [bcast_hook]
+
         def train_input_fn():
             """Create input graph for model.
             """
             # TODO : add multi-gpu training
-            with tf.device('/cpu:0'):
+            with tf.device(self.cpu_device):
                 dataset = self.get_features_labels_data()
                 return dataset
 
         # train_input_fn = self.input_fn
-        estimator.train(input_fn=train_input_fn)
+        estimator.train(input_fn=train_input_fn,
+                        hooks=hooks)
 
     def get_optimizer_fn(self):
         """returns an optimizer function
@@ -253,7 +282,11 @@ class Trainer(object):
             opt_params.pop('learning_rate', None)
 
             def optimizer_fn(lr):
-                return tf.train.AdamOptimizer(lr, **opt_params)
+                opt = tf.train.AdamOptimizer(lr)
+                if use_hvd:
+                    return hvd.DistributedOptimizer(opt)
+                else:
+                    return opt
 
         else:
             raise NotImplementedError(
@@ -271,6 +304,9 @@ class Trainer(object):
         # TODO: build configurable optimizer
         # optimizer_cfg = train_cfg.optimizer
 
+        learning_rate = self.train_cfg.learning_rate
+        if use_hvd:
+            learning_rate *= hvd.size()
         lr_decay_params = self.train_cfg.learning_rate_decay
         if lr_decay_params is not None:
             lr_decay_fn = functools.partial(
@@ -285,8 +321,8 @@ class Trainer(object):
         return tf.contrib.layers.optimize_loss(
             loss=loss,
             global_step=tf.train.get_global_step(),
-            optimizer=tf.train.AdamOptimizer,  # get_optimizer_fn(optimizer_cfg),
-            learning_rate=self.train_cfg.learning_rate,
+            optimizer=self.get_optimizer_fn(),
+            learning_rate=learning_rate,
             learning_rate_decay_fn=lr_decay_fn
         )
 
@@ -336,7 +372,8 @@ class Trainer(object):
             # inputs = {'images': features}
             # predictions = model.predict(inputs, is_training=is_training)
             predictions = model.predict(features, is_training=is_training)
-            self.prepare_tf_summary(features, predictions)
+            with tf.device(self.cpu_device):
+                self.prepare_tf_summary(features, predictions)
             # Loss, training and eval operations are not needed during inference.
             loss = None
             train_op = None
@@ -351,8 +388,10 @@ class Trainer(object):
                 #                 'masks': masks}
                 ground_truth = labels
                 losses = model.losses(predictions, ground_truth)
-                for loss_name, loss_val in losses.items():
-                    tf.summary.scalar('loss/' + loss_name, loss_val)
+                with tf.device(self.cpu_device):
+                    for loss_name, loss_val in losses.items():
+                        tf.summary.scalar('loss/' + loss_name, loss_val)
+                # with tf.device(self.param_server_device):
                 loss = losses['heatmap_loss']
                 loss += train_cfg.vecmap_loss_weight * losses['vecmap_loss']
                 loss += train_cfg.bbox_clf_weight * losses['bbox_clf_loss']
