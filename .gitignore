@@ -2,6 +2,7 @@
 *.ipynb
 !test.ipynb
 .ipynb_checkpoints/
-models/*
+models/
+!models/latest
 __pycache__/
 */__pycache__/
