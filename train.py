@@ -451,6 +451,8 @@ class Trainer(object):
             with tf.gfile.GFile(output_graph, "wb") as f:
                 f.write(output_graph_def.SerializeToString())
             print("%d ops in the final graph." % len(output_graph_def.node))
+            tf.train.write_graph(output_graph_def, absolute_model_dir,
+                                 "frozen_model.pbtxt")
 
 
 if __name__ == '__main__':
