@@ -29,7 +29,7 @@ datasets:
 #    tfrecord_path: tfrecords/val2017.records
 #    annotation_files: annotations/person_keypoints_val2017.json
   - name: ava
-    data_dir: /media/easystore/TrainData
+    data_dir: /media/admin-u/easystore/TrainData
     img_dir: .
     tfrecord_files: tfrecords/ava*.records
     annotation_files: Annotations/ava*.json
@@ -134,9 +134,9 @@ read_block_length: 64
 shuffle_buffer_size: 2048
 prefetch_size: 64  # ~ 2 x batch-size
 
-vecmap_loss_weight: 1.
-bbox_clf_weight: 2.
-bbox_reg_weight: 3.
+vecmap_loss_weight: .1
+bbox_clf_weight: 5.
+bbox_reg_weight: 10.
 
 ###########################################
 # model parameters

@@ -413,6 +413,7 @@ def keypoints_to_heatmaps_and_vectors(
         select_y_indices = np.array(select_y_indices).T
         instance_vecmap[select_y_indices.flatten(), select_x_indices.flatten(),
                         vec_indices.flatten()] = np.array(values).T.flatten()
-        overwrite = vecmap == 0
+        overwrite = (np.absolute(vecmap) < .001)
         vecmap[overwrite] = instance_vecmap[overwrite]
+        # vecmap = np.maximum(vecmap, instance_vecmap)
     return np.float32(heatmap), np.float32(vecmap)
