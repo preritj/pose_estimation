@@ -129,6 +129,23 @@ class ModelConfig(yaml.YAMLObject):
         return 'model_config'
 
 
+class InferConfig(yaml.YAMLObject):
+    yaml_tag = u'!infer'
+
+    def __init__(self,
+                 model_dir='models/latest',
+                 input_shape=None,
+                 batch_size=1):
+        self.model_dir = model_dir
+        if input_shape is None:
+            input_shape = [224, 224]
+        self.input_shape = input_shape
+        self.batch_size = batch_size
+
+    def __repr__(self):
+        return 'infer_config'
+
+
 def parse_config(config_file):
     cfgs = {}
     with open(config_file, 'r') as f:

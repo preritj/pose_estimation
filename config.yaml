@@ -167,3 +167,11 @@ skip_layers:
   - InvertedResidual_160_2
 
 fpn_depth: 96
+
+###########################################
+# inference parameters
+###########################################
+--- !infer
+model_dir: models/latest
+input_shape: [320, 320]
+batch_size: 8

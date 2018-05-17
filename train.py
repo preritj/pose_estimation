@@ -29,6 +29,7 @@ class Trainer(object):
         self.data_cfg = cfg['data_config']
         self.train_cfg = cfg['train_config']
         self.model_cfg = cfg['model_config']
+        self.infer_cfg = cfg['infer_config']
         self.hparams = tf.contrib.training.HParams(
             **self.model_cfg.__dict__,
             num_keypoints=len(self.train_cfg.train_keypoints),
@@ -408,14 +409,48 @@ class Trainer(object):
 
         return model_fn
 
-    # @staticmethod
-    # def input_fn():
-    #     """Create input graph for model.
-    #     """
-    #     # TODO : add multi-gpu training
-    #     with tf.device('/cpu:0'):
-    #         dataset = Trainer.get_features_labels_data()
-    #         return dataset
+    def freeze_model(self):
+        # We retrieve our checkpoint fullpath
+        checkpoint = tf.train.get_checkpoint_state(self.infer_cfg.model_dir)
+        input_checkpoint = checkpoint.model_checkpoint_path
+
+        # We precise the file fullname of our freezed graph
+
+        absolute_model_dir = os.path.dirname(input_checkpoint)
+        output_graph = os.path.join(absolute_model_dir, "frozen_model.pb")
+
+        model, output_nodes = None, None
+        model_name = self.hparams.model_name
+        print("Using model ", model_name)
+        if model_name == 'mobilenet_pose':
+            model = MobilenetPose(self.hparams)
+            output_nodes = ['decoder/heatmap/BiasAdd',
+                            'decoder/vecmap/BiasAdd']
+        else:
+            NotImplementedError("{} not implemented".format(model_name))
+
+        h, w = self.infer_cfg.input_shape
+        inputs = {'images': tf.placeholder(tf.float32, [None, h, w, 3])}
+        _ = model.predict(inputs, is_training=False)
+
+        for n in tf.get_default_graph().as_graph_def().node:
+            print(n.name)
+
+        saver = tf.train.Saver()
+        with tf.Session() as sess:
+            saver.restore(sess, input_checkpoint)
+
+            # We use a built-in TF helper to export variables to constants
+            output_graph_def = tf.graph_util.convert_variables_to_constants(
+                sess,  # The session is used to retrieve the weights
+                tf.get_default_graph().as_graph_def(),  # The graph_def is used to retrieve the nodes
+                output_nodes  # The output node names are used to select the useful nodes
+            )
+
+            # Finally we serialize and dump the output graph to the filesystem
+            with tf.gfile.GFile(output_graph, "wb") as f:
+                f.write(output_graph_def.SerializeToString())
+            print("%d ops in the final graph." % len(output_graph_def.node))
 
 
 if __name__ == '__main__':
@@ -427,4 +462,5 @@ if __name__ == '__main__':
     assert os.path.exists(config_file), \
         "{} not found".format(config_file)
     trainer = Trainer(config_file)
-    trainer.train()
+    # trainer.train()
+    trainer.freeze_model()
