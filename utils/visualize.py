@@ -43,7 +43,8 @@ def visualize_heatmaps(image, heatmaps, vecmaps,
     for i, (kp1, kp2) in enumerate(pairs):
         y_indices_1, x_indices_1 = heatmaps[:, :, kp1].nonzero()
         for x, y in zip(x_indices_1, y_indices_1):
-            x0, y0 = scale_w * x, scale_h * y
+            x0 = int(scale_w * (x + 0.5))
+            y0 = int(scale_h * (y + 0.5))
             delta_x = scale_w * int(vecmaps[y, x, 4 * i])
             delta_y = scale_h * int(vecmaps[y, x, 4 * i + 1])
             col = (255. * colors[kp1][:3]).astype(np.uint8)
@@ -53,7 +54,8 @@ def visualize_heatmaps(image, heatmaps, vecmaps,
                                col, 1)
         y_indices_2, x_indices_2 = heatmaps[:, :, kp2].nonzero()
         for x, y in zip(x_indices_2, y_indices_2):
-            x0, y0 = scale_w * x, scale_h * y
+            x0 = int(scale_w * (x + 0.5))
+            y0 = int(scale_h * (y + 0.5))
             delta_x = scale_w * int(vecmaps[y, x, 4 * i + 2])
             delta_y = scale_h * int(vecmaps[y, x, 4 * i + 3])
             col = (255. * colors[kp2][:3]).astype(np.uint8)
