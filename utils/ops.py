@@ -44,13 +44,14 @@ def nearest_neighbor_upsampling(input_tensor, scale):
     return resized_tensor
 
 
-def non_max_suppression(input_tensor, window_size):
+def non_max_suppression(input_tensor, window_size, name='nms'):
     # input: B x H x W x C
     pooled = tf.nn.max_pool(input_tensor,
                             ksize=[1, window_size, window_size, 1],
                             strides=[1, 1, 1, 1], padding='SAME')
     output = tf.where(tf.equal(input_tensor, pooled),
                       input_tensor,
-                      tf.zeros_like(input_tensor))
+                      tf.zeros_like(input_tensor),
+                      name=name)
     # output: B X W X H x C
     return output

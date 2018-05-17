@@ -424,14 +424,16 @@ class Trainer(object):
         print("Using model ", model_name)
         if model_name == 'mobilenet_pose':
             model = MobilenetPose(self.hparams)
-            output_nodes = ['decoder/heatmap/BiasAdd',
-                            'decoder/vecmap/BiasAdd']
         else:
             NotImplementedError("{} not implemented".format(model_name))
 
         h, w = self.infer_cfg.input_shape
-        inputs = {'images': tf.placeholder(tf.float32, [None, h, w, 3])}
-        _ = model.predict(inputs, is_training=False)
+        inputs = {'images': tf.placeholder(tf.float32, [None, h, w, 3],
+                                           name='images')}
+        predictions = model.predict(inputs, is_training=False)
+        heatmaps = tf.nn.sigmoid(predictions['heatmaps'], name='heatmaps')
+
+        output_nodes = ['heatmaps']
 
         for n in tf.get_default_graph().as_graph_def().node:
             print(n.name)
@@ -451,8 +453,8 @@ class Trainer(object):
             with tf.gfile.GFile(output_graph, "wb") as f:
                 f.write(output_graph_def.SerializeToString())
             print("%d ops in the final graph." % len(output_graph_def.node))
-            tf.train.write_graph(output_graph_def, absolute_model_dir,
-                                 "frozen_model.pbtxt")
+            # tf.train.write_graph(output_graph_def, absolute_model_dir,
+            #                      "frozen_model.pbtxt")
 
 
 if __name__ == '__main__':
