@@ -168,7 +168,6 @@ skip_layers:
 
 fpn_depth: 96
 
-upsampling: movidius
 
 ###########################################
 # inference parameters
