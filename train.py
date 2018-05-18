@@ -10,6 +10,7 @@ from utils.bboxes import (generate_anchors, get_matches,
 from utils.dataset_util import keypoints_to_heatmaps_and_vectors
 from utils.ops import non_max_suppression
 import utils.visualize as vis
+from tensorflow.python import pywrap_tensorflow
 try:
     import horovod.tensorflow as hvd
     print("Found horovod module, will use distributed training")
@@ -448,8 +449,13 @@ class Trainer(object):
         for n in tf.get_default_graph().as_graph_def().node:
             print(n.name)
 
-        saver = tf.train.Saver()
+        reader = pywrap_tensorflow.NewCheckpointReader(input_checkpoint)
+        checkpoint_vars = reader.get_variable_to_shape_map()
+        checkpoint_vars = [v for v in tf.trainable_variables()
+                           if v.name.split(":")[0] in checkpoint_vars.keys()]
+        saver = tf.train.Saver(checkpoint_vars)
         with tf.Session() as sess:
+            sess.run(tf.global_variables_initializer())
             saver.restore(sess, input_checkpoint)
 
             # We use a built-in TF helper to export variables to constants
@@ -476,5 +482,5 @@ if __name__ == '__main__':
     assert os.path.exists(config_file), \
         "{} not found".format(config_file)
     trainer = Trainer(config_file)
-    trainer.train()
-    # trainer.freeze_model()
+    # trainer.train()
+    trainer.freeze_model()
