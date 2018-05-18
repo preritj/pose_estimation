@@ -138,6 +138,8 @@ vecmap_loss_weight: .1
 bbox_clf_weight: 5.
 bbox_reg_weight: 10.
 
+quantize: False
+
 ###########################################
 # model parameters
 ###########################################

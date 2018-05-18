@@ -90,7 +90,7 @@ def run_inference(img_files):
 
 
 if __name__ == "__main__":
-    data_dir = '/media/easystore/TrainData/Walmart/Round1/Recording_2'
+    data_dir = '/media/admin-u/easystore/TrainData/Walmart/Round1/Recording_2'
     # data_dir = '/media/easystore/TrainData/Lab/April20/Recording_44'
     img_files = []
     for img_id in range(500):
