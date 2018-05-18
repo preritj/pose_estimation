@@ -403,7 +403,7 @@ class Trainer(object):
                 # with this training tool. When training from scratch, quant_delay
                 # can be used to activate quantization after training to converge
                 # with the float graph, effectively fine-tuning the model.
-                tf.contrib.quantize.create_training_graph(quant_delay=20000)
+                tf.contrib.quantize.create_training_graph(tf.Graph(), quant_delay=20000)
                 train_op = self.get_train_op(loss)
                 eval_metric_ops = None  # get_eval_metric_ops(labels, predictions)
             return tf.estimator.EstimatorSpec(
@@ -476,5 +476,5 @@ if __name__ == '__main__':
     assert os.path.exists(config_file), \
         "{} not found".format(config_file)
     trainer = Trainer(config_file)
-    # trainer.train()
-    trainer.freeze_model()
+    trainer.train()
+    # trainer.freeze_model()
