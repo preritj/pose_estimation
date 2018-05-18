@@ -49,7 +49,7 @@ def get_batches(img_file):
 
 
 with tf.Session(graph=graph) as sess:
-    data_dir = '/media/easystore/TrainData/Walmart/Round1/Recording_10'
+    data_dir = '/media/easystore/TrainData/Walmart/Round1/Recording_2'
     total_time = 0.
 
     n_frames = 500
