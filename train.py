@@ -397,6 +397,13 @@ class Trainer(object):
                 loss += train_cfg.vecmap_loss_weight * losses['vecmap_loss']
                 loss += train_cfg.bbox_clf_weight * losses['bbox_clf_loss']
                 loss += train_cfg.bbox_reg_weight * losses['bbox_reg_loss']
+                # Call the training rewrite which rewrites the graph in-place with
+                # FakeQuantization nodes and folds batchnorm for training. It is
+                # often needed to fine tune a floating point model for quantization
+                # with this training tool. When training from scratch, quant_delay
+                # can be used to activate quantization after training to converge
+                # with the float graph, effectively fine-tuning the model.
+                tf.contrib.quantize.create_training_graph(quant_delay=20000)
                 train_op = self.get_train_op(loss)
                 eval_metric_ops = None  # get_eval_metric_ops(labels, predictions)
             return tf.estimator.EstimatorSpec(
@@ -431,6 +438,9 @@ class Trainer(object):
         inputs = {'images': tf.placeholder(tf.float32, [None, h, w, 3],
                                            name='images')}
         predictions = model.predict(inputs, is_training=False)
+        # Call the eval rewrite which rewrites the graph in-place with
+        # FakeQuantization nodes and fold batchnorm for eval.
+        tf.contrib.quantize.create_eval_graph()
         heatmaps = tf.nn.sigmoid(predictions['heatmaps'], name='heatmaps')
 
         output_nodes = ['heatmaps']

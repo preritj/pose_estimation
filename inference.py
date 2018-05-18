@@ -61,11 +61,12 @@ def run_inference(img_files):
         for img_file in img_files:
             image, batch_images = get_batches(img_file)
 
+            # get inference time for forward pass
             start = time.time()
             heatmap_pred = sess.run(heatmap, feed_dict={tf_images: batch_images})
+            end = time.time()
+            total_time += end - start
 
-
-            stride = 8  # network generates heatmap output of 40 x 40
             out = np.zeros_like(image, dtype=np.float32)
             # combine the patches using some logic
             # e.g. here I simply use maximum
@@ -78,9 +79,6 @@ def run_inference(img_files):
             out[out > threshold] = 1.
             out[out < threshold] = 0.
             out = (255. * out).astype(np.uint8)
-
-            end = time.time()
-            total_time += end - start
 
             # back to BGR for opencv display
             image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
