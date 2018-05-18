@@ -31,7 +31,7 @@ heatmap = graph.get_tensor_by_name('import/heatmaps:0')
 # in fact, overlapping patches should be encouraged!
 # The following setting works well for Walmart videos only:
 patches_top_left = [[0, 0], [0, 560], [0, 1120],
-                        [280, 0], [280, 560], [280, 1120]]
+                    [280, 0], [280, 560], [280, 1120]]
 patch_h, patch_w = 800, 800
 
 
@@ -49,10 +49,11 @@ def get_batches(img_file):
 
 
 with tf.Session(graph=graph) as sess:
-    data_dir = '/media/easystore/TrainData/Walmart/Round1/Recording_2'
+    data_dir = '/media/easystore/TrainData/Walmart/Round1/Recording_10'
     total_time = 0.
 
-    for img_id in range(300):
+    n_frames = 500
+    for img_id in range(n_frames):
         img_file = '20180308_' + str(img_id).zfill(7) + '.jpg'
         img_file = os.path.join(data_dir, img_file)
         image, batch_images = get_batches(img_file)
@@ -82,4 +83,4 @@ with tf.Session(graph=graph) as sess:
         cv2.imshow('out', out)
         cv2.waitKey(1)
     cv2.destroyAllWindows()
-    print("Frames per second : ", 300. / total_time)
+    print("Frames per second : ", n_frames / total_time)
