@@ -29,10 +29,15 @@ heatmap = graph.get_tensor_by_name('import/heatmaps:0')
 # where dimension is defined as sqrt(h * w)
 # aspect ratio must be preserved even if patches overlap
 # in fact, overlapping patches should be encouraged!
-# The following setting works well for Walmart videos only:
+
+# The following setting works well for Walmart videos:
 patches_top_left = [[0, 0], [0, 560], [0, 1120],
                     [280, 0], [280, 560], [280, 1120]]
 patch_h, patch_w = 800, 800
+
+# The following setting works well for Recording 44:
+# patches_top_left = [[0, 0], [0, 840]]
+# patch_h, patch_w = 1080, 1080
 
 
 def get_batches(img_file):
@@ -48,39 +53,50 @@ def get_batches(img_file):
     return image, batch_images
 
 
-with tf.Session(graph=graph) as sess:
+def run_inference(img_files):
+    with tf.Session(graph=graph) as sess:
+        total_time = 0.
+
+        n_frames = len(img_files)
+        for img_file in img_files:
+            image, batch_images = get_batches(img_file)
+
+            start = time.time()
+            heatmap_pred = sess.run(heatmap, feed_dict={tf_images: batch_images})
+
+
+            stride = 8  # network generates heatmap output of 40 x 40
+            out = np.zeros_like(image, dtype=np.float32)
+            # combine the patches using some logic
+            # e.g. here I simply use maximum
+            for i, (y0, x0) in enumerate(patches_top_left):
+                out[y0:y0 + patch_h, x0:x0 + patch_h] = np.maximum(
+                    out[y0:y0 + patch_h, x0:x0 + patch_h],
+                    cv2.resize(heatmap_pred[i], (patch_w, patch_h)))
+            # some post-processing
+            threshold = 0.25
+            out[out > threshold] = 1.
+            out[out < threshold] = 0.
+            out = (255. * out).astype(np.uint8)
+
+            end = time.time()
+            total_time += end - start
+
+            # back to BGR for opencv display
+            image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+            out = cv2.addWeighted(image, 0.4, out, 0.6, 0)
+            cv2.imshow('out', out)
+            cv2.waitKey(1)
+        cv2.destroyAllWindows()
+        print("Frames per second : ", n_frames / total_time)
+
+
+if __name__ == "__main__":
     data_dir = '/media/easystore/TrainData/Walmart/Round1/Recording_2'
-    total_time = 0.
-
-    n_frames = 500
-    for img_id in range(n_frames):
+    # data_dir = '/media/easystore/TrainData/Lab/April20/Recording_44'
+    img_files = []
+    for img_id in range(500):
         img_file = '20180308_' + str(img_id).zfill(7) + '.jpg'
-        img_file = os.path.join(data_dir, img_file)
-        image, batch_images = get_batches(img_file)
-
-        start = time.time()
-        heatmap_pred = sess.run(heatmap, feed_dict={tf_images: batch_images})
-        end = time.time()
-        total_time += end - start
-
-        stride = 8  # network generates heatmap output of 40 x 40
-        out = np.zeros_like(image, dtype=np.float32)
-        # combine the patches using some logic
-        # e.g. here I simply use maximum
-        for i, (y0, x0) in enumerate(patches_top_left):
-            out[y0:y0 + patch_h, x0:x0 + patch_h] = np.maximum(
-                out[y0:y0 + patch_h, x0:x0 + patch_h],
-                cv2.resize(heatmap_pred[i], (patch_w, patch_h)))
-        # some post-processing
-        threshold = 0.25
-        out[out > threshold] = 1.
-        out[out < threshold] = 0.
-        out = (255. * out).astype(np.uint8)
-
-        # back to BGR for opencv display
-        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-        out = cv2.addWeighted(image, 0.4, out, 0.6, 0)
-        cv2.imshow('out', out)
-        cv2.waitKey(1)
-    cv2.destroyAllWindows()
-    print("Frames per second : ", n_frames / total_time)
+        # img_file = '20180420_' + str(img_id).zfill(7) + '.jpg'
+        img_files.append(os.path.join(data_dir, img_file))
+    run_inference(img_files)
