@@ -82,7 +82,10 @@ class MobilenetPose(Model):
                         expand_ratio=6,
                         scope=fpn_name)
                     fpn_layers[fpn_name] = net
-                    net = ops.nearest_neighbor_upsampling(net, 2)
+                    if self.cfg.upsampling == 'tf':
+                        net = ops.nearest_neighbor_upsampling(net, 2)
+                    else:
+                        net = ops.upsample(net)
                     skip_layer = self._skip_layers[i]
                     net = tf.concat([net, image_features[skip_layer]], -1)
                 heatmap_branch = inverted_residual_bottleneck(

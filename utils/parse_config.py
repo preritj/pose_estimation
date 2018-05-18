@@ -93,6 +93,7 @@ class ModelConfig(yaml.YAMLObject):
                  min_depth=8,
                  skip_layers=None,
                  fpn_depth=96,
+                 upsampling='tf',
                  base_anchor_sizes=None,
                  base_anchor_strides=None,
                  anchor_scales=None,
@@ -114,6 +115,7 @@ class ModelConfig(yaml.YAMLObject):
             skip_layers = []
         self.skip_layers = skip_layers
         self.fpn_depth = fpn_depth
+        self.upsampling = upsampling
         self.base_anchor_sizes = base_anchor_sizes
         self.base_anchor_strides = base_anchor_strides
         self.anchor_ratios = anchor_ratios

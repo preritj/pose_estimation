@@ -476,5 +476,5 @@ if __name__ == '__main__':
     assert os.path.exists(config_file), \
         "{} not found".format(config_file)
     trainer = Trainer(config_file)
-    trainer.train()
-    # trainer.freeze_model()
+    # trainer.train()
+    trainer.freeze_model()
