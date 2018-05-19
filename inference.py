@@ -5,34 +5,44 @@ import os
 import time
 
 
-img_h, img_w = (1080, 1920)
-net_input_h, net_input_w = (320, 320)
-# create batch of image patches of appropriate sizes
+img_h0, img_w0 = (1080, 1920)
+patch_h, patch_w = (320, 320)
+frozen_model_filename = 'models/latest/frozen_model.pb'
+
+# create image patches of appropriate sizes
 # recommended patch dimension is 2 to 4 times bbox dimension
 # where dimension is defined as sqrt(h * w)
 # aspect ratio must be preserved even if patches overlap
-# in fact, overlapping patches should be encouraged!
+# in fact, overlapping patches are encouraged!
 
-# The following setting works well for Walmart videos:
-patch_h, patch_w = (800, 800)
-strides_rows, strides_cols = (280, 560)
+# settings for Walmart videos:
+img_h, img_w = (450, 800)
+strides_rows, strides_cols = (130, 240)
 
-# The following setting works well for Recording 44:
-# patch_h, patch_w = 1080, 1080
-# strides_rows, strides_cols = (1, 840)
+# settings for Recording 44:
+# img_h, img_w = (320, 569)
+# strides_rows, strides_cols = (1, 249)
 
 
 n_rows = int(np.ceil(img_h / patch_h))
 n_cols = int(np.ceil(img_w / patch_w))
-patches_top = np.repeat(strides_rows *np.arange(n_rows), n_cols)
+patches_top = np.repeat(strides_rows * np.arange(n_rows), n_cols)
 patches_left = np.tile(strides_cols * np.arange(n_cols), n_rows)
 patches_top_left = np.array([patches_top, patches_left]).T
+
+
+def read_and_resize_image(img_file):
+    image = cv2.imread(img_file)
+    # tensorflow expects RGB!
+    image = image[:, :, ::-1]
+    # cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    image = cv2.resize(image, (img_w, img_h))
+    return image
 
 
 def create_patches(image):
     """tensorflow implementation for patch extraction"""
     images = tf.expand_dims(image, axis=0)
-    # TODO: resize image first
     patches = tf.extract_image_patches(
         images,
         ksizes=[1, patch_h, patch_w, 1],
@@ -43,8 +53,6 @@ def create_patches(image):
     )
     patches = tf.reshape(
         patches, (len(patches_top), patch_h, patch_w, 3))
-    patches = tf.image.resize_images(
-        patches, size=(net_input_h, net_input_w))
     return patches
 
 
@@ -53,7 +61,6 @@ def create_patches_v2(image):
     [currently not used]
     NOTE: run speed similar to create_patch"""
 
-    # TODO: resize image first
     def _extract_patch(patches_top_left_):
         y, x = patches_top_left_
         return image[y:y + patch_h, x:x + patch_w]
@@ -63,16 +70,24 @@ def create_patches_v2(image):
                         back_prop=False,
                         parallel_iterations=12,  # CPU cores?
                         dtype=tf.float32)
-    patches = tf.image.resize_images(
-        patches, size=(net_input_h, net_input_w))
     return patches
+
+
+def stitch_horizontal(patch1, patch2):
+    overlap_cols = patch_w - strides_cols
+    left, left_overlap = tf.split(
+        patch1, [-1, strides_cols], axis=1)
+    right_overlap, right = tf.split(
+        patch2, [strides_cols, -1], axis=1)
 
 
 def stitch_patches(patches):
     pass
 
 
-def load_graph(frozen_graph_filename):
+
+
+def load_graph_def(frozen_graph_filename):
     # We load the protobuf file from the disk and parse it to retrieve the
     # unserialized graph_def
     with tf.gfile.GFile(frozen_graph_filename, "rb") as f:
@@ -81,23 +96,7 @@ def load_graph(frozen_graph_filename):
 
     return graph_def
 
-    # # Then, we import the graph_def into a new Graph and returns it
-    # with tf.Graph().as_default() as graph:
-    #     input_image = tf.placeholder(tf.float32, shape=[1080, 1920, 3],
-    #                                  name='placeholder/image')
-    #     tf_batch_images = tf_batch(input_image)
-    #     # The name var will prefix every op/nodes in your graph
-    #     # Since we load everything in a new graph, this is not needed
-    #     tf.import_graph_def(graph_def)
-    # return graph
 
-
-# preprocess_graph = tf.Graph()
-# with preprocess_graph.as_default():
-#     input_image = tf.placeholder(tf.float32, shape=[1080, 1920, 3])
-#     tf_batch_images = tf_batch(input_image)
-
-frozen_model_filename = 'models/latest/frozen_model.pb'
 # graph = load_graph(frozen_model_filename)
 # input_image = graph.get_tensor_by_name('placeholder/image:0')
 # tf_batch_images = graph.get_tensor_by_name('batch_images')
@@ -121,7 +120,7 @@ def run_inference(img_files):
     input_image = tf.placeholder(tf.float32, shape=[1080, 1920, 3])
     tf_batch_images = create_patches(input_image)
 
-    graph_def = load_graph(frozen_model_filename)
+    graph_def = load_graph_def(frozen_model_filename)
     with tf.get_default_graph().as_default() as g:
         tf.import_graph_def(graph_def)
     tf_images = g.get_tensor_by_name('import/images:0')
@@ -132,10 +131,7 @@ def run_inference(img_files):
     n_skip = 3
     n_frames = len(img_files)
     for count, img_file in enumerate(img_files):
-        # read image 1080 x 1920
-        image = cv2.imread(img_file)
-        # tensorflow expects RGB!
-        image = image[:, :, ::-1]  # cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        read_and_resize_image(img_file)
         t0 = time.time()
         batch_images = sess.run(tf_batch_images, feed_dict={input_image: image})
         t1 = time.time()
