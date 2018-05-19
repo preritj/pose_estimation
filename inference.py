@@ -5,7 +5,8 @@ import os
 import time
 
 
-net_input_h, net_input_w = 320, 320
+img_h, img_w = (1080, 1920)
+net_input_h, net_input_w = (320, 320)
 # create batch of image patches of appropriate sizes
 # recommended patch dimension is 2 to 4 times bbox dimension
 # where dimension is defined as sqrt(h * w)
@@ -13,23 +14,26 @@ net_input_h, net_input_w = 320, 320
 # in fact, overlapping patches should be encouraged!
 
 # The following setting works well for Walmart videos:
-patches_top_left = [[0, 0], [0, 560], [0, 1120],
-                    [280, 0], [280, 560], [280, 1120]]
-patches_top = [0, 0, 0, 280, 280, 280]
-patches_left = [0, 560, 1120, 0, 560, 1120]
-patch_h, patch_w = 800, 800
-strides_rows, strides_cols = 280, 560
-
+patch_h, patch_w = (800, 800)
+strides_rows, strides_cols = (280, 560)
 
 # The following setting works well for Recording 44:
-# patches_top_left = [[0, 0], [0, 840]]
 # patch_h, patch_w = 1080, 1080
+# strides_rows, strides_cols = (1, 840)
 
 
-def tf_batch(image):
-    """tensorflow implementation for patch extarction"""
+n_rows = int(np.ceil(img_h / patch_h))
+n_cols = int(np.ceil(img_w / patch_w))
+patches_top = np.repeat(strides_rows *np.arange(n_rows), n_cols)
+patches_left = np.tile(strides_cols * np.arange(n_cols), n_rows)
+patches_top_left = np.array([patches_top, patches_left]).T
+
+
+def create_patches(image):
+    """tensorflow implementation for patch extraction"""
     images = tf.expand_dims(image, axis=0)
-    batch_images = tf.extract_image_patches(
+    # TODO: resize image first
+    patches = tf.extract_image_patches(
         images,
         ksizes=[1, patch_h, patch_w, 1],
         strides=[1, strides_rows, strides_cols, 1],
@@ -37,30 +41,35 @@ def tf_batch(image):
         padding='VALID',
         name=None
     )
-    batch_images = tf.reshape(
-        batch_images, (len(patches_top), patch_h, patch_w, 3))
-    batch_images = tf.image.resize_images(
-        batch_images, size=(net_input_h, net_input_w))
-    return batch_images
+    patches = tf.reshape(
+        patches, (len(patches_top), patch_h, patch_w, 3))
+    patches = tf.image.resize_images(
+        patches, size=(net_input_h, net_input_w))
+    return patches
 
 
-def tf_batch_v2(image):
-    """my implementation of patch extraction:
-    NOTE: this function gives about same speed as tf_batch"""
+def create_patches_v2(image):
+    """custom implementation of patch extraction:
+    [currently not used]
+    NOTE: run speed similar to create_patch"""
 
-    def _extract_patch(input_):
-        y, x = input_
+    # TODO: resize image first
+    def _extract_patch(patches_top_left_):
+        y, x = patches_top_left_
         return image[y:y + patch_h, x:x + patch_w]
 
-    elems = (np.array(patches_top), np.array(patches_left))
-    batch_images = tf.map_fn(_extract_patch,
-                             elems,
-                             back_prop=False,
-                             parallel_iterations=12,  # CPU cores?
-                             dtype=tf.float32)
-    batch_images = tf.image.resize_images(
-        batch_images, size=(net_input_h, net_input_w))
-    return batch_images
+    patches = tf.map_fn(_extract_patch,
+                        elems=(patches_top, patches_left),
+                        back_prop=False,
+                        parallel_iterations=12,  # CPU cores?
+                        dtype=tf.float32)
+    patches = tf.image.resize_images(
+        patches, size=(net_input_h, net_input_w))
+    return patches
+
+
+def stitch_patches(patches):
+    pass
 
 
 def load_graph(frozen_graph_filename):
@@ -110,7 +119,7 @@ frozen_model_filename = 'models/latest/frozen_model.pb'
 
 def run_inference(img_files):
     input_image = tf.placeholder(tf.float32, shape=[1080, 1920, 3])
-    tf_batch_images = tf_batch(input_image)
+    tf_batch_images = create_patches(input_image)
 
     graph_def = load_graph(frozen_model_filename)
     with tf.get_default_graph().as_default() as g:
@@ -118,23 +127,26 @@ def run_inference(img_files):
     tf_images = g.get_tensor_by_name('import/images:0')
     heatmap = g.get_tensor_by_name('import/heatmaps:0')
     sess = tf.Session(graph=g)
-    t1, t2, t3 = 0., 0., 0.
+    sum_t1, sum_t2, sum_t3 = 0., 0., 0.
 
+    n_skip = 3
     n_frames = len(img_files)
     for count, img_file in enumerate(img_files):
         # read image 1080 x 1920
         image = cv2.imread(img_file)
         # tensorflow expects RGB!
         image = image[:, :, ::-1]  # cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        start = time.time()
+        t0 = time.time()
         batch_images = sess.run(tf_batch_images, feed_dict={input_image: image})
-        if count > 0:  # skip first inference
-            t1 += time.time() - start
+        t1 = time.time()
+        if count > n_skip:  # skip first few inferences
+            sum_t1 += t1 - t0
 
         # get inference time for forward pass
         heatmap_pred = sess.run(heatmap, feed_dict={tf_images: batch_images})
-        if count > 0:  # skip first inference
-            t2 += time.time() - start
+        t2 = time.time()
+        if count > n_skip:  # skip first few inferences
+            sum_t2 += t2 - t1
 
         out = np.zeros_like(image, dtype=np.float32)
         # combine the patches using some logic
@@ -156,9 +168,9 @@ def run_inference(img_files):
         cv2.waitKey(1)
     cv2.destroyAllWindows()
     print("Pre-processing time : {:5.2f} ms/image".format(
-        t1 / (n_frames - 1) * 1000))
+        sum_t1 / (n_frames - n_skip) * 1000))
     print("Network inference time : {:5.2f} ms/image".format(
-        t2 / (n_frames - 1) * 1000))
+        sum_t2 / (n_frames - n_skip) * 1000))
 
 
 if __name__ == "__main__":
