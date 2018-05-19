@@ -9,15 +9,13 @@ from dataset.pose_data import PoseData
 class AVAretail(PoseData):
     def __init__(self, pose_cfg, image_dir, annotation_files=None,
                  img_shape=None):
-        self.idx_count = 0
-        self.idx_map = {}
+        self.track_ids = defaultdict(list)
         super().__init__(pose_cfg, image_dir, annotation_files,
                          img_shape)
 
     def _build_dataset(self, dataset):
         for i, annotations in tqdm(enumerate(dataset)):
-            img_id = i + self.idx_count
-            self.idx_count += 1
+            img_id = i
             img_name = annotations['FileName']
             img_path = os.path.join(self.image_dir, img_name)
             if not os.path.exists(img_path):
@@ -45,6 +43,11 @@ class AVAretail(PoseData):
                     ymax = int(min(ymin + h, height - 1))
                     xmin, ymin = int(max(0, xmin)), int(max(0, ymin))
                     bbox = [ymin, xmin, ymax, xmax]
+                    # add track ID if present
+                    if 'TrackId' in person.keys():
+                        trackid = person['TrackId']
+                        if trackid > 0:
+                            self.track_ids[trackid].append(img_id)
                 if (('Keypoints' not in person.keys())
                         or (person['Keypoints'] is None)):
                     # make mask using bbox
