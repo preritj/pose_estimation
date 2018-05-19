@@ -5,6 +5,7 @@ import os
 import time
 
 
+net_input_h, net_input_w = 320, 320
 # create batch of image patches of appropriate sizes
 # recommended patch dimension is 2 to 4 times bbox dimension
 # where dimension is defined as sqrt(h * w)
@@ -17,6 +18,8 @@ patches_top_left = [[0, 0], [0, 560], [0, 1120],
 patches_top = [0, 0, 0, 280, 280, 280]
 patches_left = [0, 560, 1120, 0, 560, 1120]
 patch_h, patch_w = 800, 800
+strides_rows, strides_cols = 280, 560
+
 
 # The following setting works well for Recording 44:
 # patches_top_left = [[0, 0], [0, 840]]
@@ -24,23 +27,26 @@ patch_h, patch_w = 800, 800
 
 
 def tf_batch(image):
-    """tensorflow implementation"""
+    """tensorflow implementation for patch extarction"""
     images = tf.expand_dims(image, axis=0)
     batch_images = tf.extract_image_patches(
         images,
         ksizes=[1, patch_h, patch_w, 1],
-        strides=[1, 280, 560, 1],
+        strides=[1, strides_rows, strides_cols, 1],
         rates=[1, 1, 1, 1],
         padding='VALID',
         name=None
     )
-    batch_images = tf.reshape(batch_images, (6, patch_h, patch_w, 3))
-    batch_images = tf.image.resize_images(batch_images, size=(320, 320))
+    batch_images = tf.reshape(
+        batch_images, (len(patches_top), patch_h, patch_w, 3))
+    batch_images = tf.image.resize_images(
+        batch_images, size=(net_input_h, net_input_w))
     return batch_images
 
 
 def tf_batch_v2(image):
-    """my implementation : about same speed as tf_batch"""
+    """my implementation of patch extraction:
+    NOTE: this function gives about same speed as tf_batch"""
 
     def _extract_patch(input_):
         y, x = input_
@@ -52,7 +58,8 @@ def tf_batch_v2(image):
                              back_prop=False,
                              parallel_iterations=12,  # CPU cores?
                              dtype=tf.float32)
-    batch_images = tf.image.resize_images(batch_images, size=(320, 320))
+    batch_images = tf.image.resize_images(
+        batch_images, size=(net_input_h, net_input_w))
     return batch_images
 
 
