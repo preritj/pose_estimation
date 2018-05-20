@@ -7,7 +7,7 @@ import time
 
 img_h0, img_w0 = (1080, 1920)
 patch_h, patch_w = (320, 320)
-frozen_model_filename = 'models/latest/frozen_model.pb'
+frozen_model_filename = 'models/latest/optimized_model.pb'
 
 # create image patches of appropriate sizes
 # recommended patch dimension is 2 to 4 times bbox dimension
@@ -117,7 +117,7 @@ def load_graph_def(frozen_graph_filename):
 
 
 def run_inference(img_files):
-    input_image = tf.placeholder(tf.float32, shape=[1080, 1920, 3])
+    input_image = tf.placeholder(tf.float32, shape=[img_h, img_w, 3])
     tf_batch_images = create_patches(input_image)
 
     graph_def = load_graph_def(frozen_model_filename)
@@ -131,7 +131,7 @@ def run_inference(img_files):
     n_skip = 3
     n_frames = len(img_files)
     for count, img_file in enumerate(img_files):
-        read_and_resize_image(img_file)
+        image = read_and_resize_image(img_file)
         t0 = time.time()
         batch_images = sess.run(tf_batch_images, feed_dict={input_image: image})
         t1 = time.time()
@@ -156,6 +156,9 @@ def run_inference(img_files):
         out[out > threshold] = 1.
         out[out < threshold] = 0.
         out = (255. * out).astype(np.uint8)
+        t3 = time.time()
+        if count > n_skip:  # skip first few inferences
+            sum_t3 += t3 - t2
 
         # back to BGR for opencv display
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
@@ -167,13 +170,15 @@ def run_inference(img_files):
         sum_t1 / (n_frames - n_skip) * 1000))
     print("Network inference time : {:5.2f} ms/image".format(
         sum_t2 / (n_frames - n_skip) * 1000))
+    print("Post-processing time : {:5.2f} ms/image".format(
+        sum_t3 / (n_frames - n_skip) * 1000))
 
 
 if __name__ == "__main__":
     data_dir = '/media/easystore/TrainData/Walmart/Round1/Recording_2'
     # data_dir = '/media/easystore/TrainData/Lab/April20/Recording_44'
     img_files = []
-    for img_id in range(50):
+    for img_id in range(500):
         img_file = '20180308_' + str(img_id).zfill(7) + '.jpg'
         # img_file = '20180420_' + str(img_id).zfill(7) + '.jpg'
         img_files.append(os.path.join(data_dir, img_file))
