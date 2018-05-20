@@ -3,11 +3,14 @@ import cv2
 import numpy as np
 import os
 import time
+from utils import ops
 
 
 img_h0, img_w0 = (1080, 1920)
 patch_h, patch_w = (320, 320)
-frozen_model_filename = 'models/latest/optimized_model.pb'
+out_stride = 8
+# frozen_model_filename = 'models/latest/optimized_model.pb'
+frozen_model_filename = 'models/latest/frozen_model.pb'
 
 # create image patches of appropriate sizes
 # recommended patch dimension is 2 to 4 times bbox dimension
@@ -16,8 +19,8 @@ frozen_model_filename = 'models/latest/optimized_model.pb'
 # in fact, overlapping patches are encouraged!
 
 # settings for Walmart videos:
-img_h, img_w = (450, 800)
-strides_rows, strides_cols = (130, 240)
+img_h, img_w = (456, 800)
+strides_rows, strides_cols = (136, 240)
 
 # settings for Recording 44:
 # img_h, img_w = (320, 569)
@@ -73,18 +76,53 @@ def create_patches_v2(image):
     return patches
 
 
-def stitch_horizontal(patch1, patch2):
-    overlap_cols = patch_w - strides_cols
+def stitch_to_right(patch_left, patch_right):
+    overlap_cols = int((patch_w - strides_cols) / out_stride)
     left, left_overlap = tf.split(
-        patch1, [-1, strides_cols], axis=1)
+        patch_left, [-1, overlap_cols], axis=1)
     right_overlap, right = tf.split(
-        patch2, [strides_cols, -1], axis=1)
+        patch_right, [overlap_cols, -1], axis=1)
+    weights = tf.reshape(
+        tf.range(overlap_cols, dtype=tf.float32),
+        shape=(1, overlap_cols, 1))
+    overlap = (left_overlap * (overlap_cols - 1. - weights)
+               + right_overlap * weights) / overlap_cols
+    out = tf.concat([left, overlap, right], axis=1)
+    return out
+
+
+def stitch_to_bottom(patch_top, patch_bottom):
+    overlap_rows = int((patch_h - strides_rows) / out_stride)
+    top, top_overlap = tf.split(
+        patch_top, [-1, overlap_rows], axis=0)
+    bottom_overlap, bottom = tf.split(
+        patch_bottom, [overlap_rows, -1], axis=0)
+    weights = tf.reshape(
+        tf.range(overlap_rows, dtype=tf.float32),
+        shape=(overlap_rows, 1, 1))
+    overlap = (top_overlap * (overlap_rows - 1. - weights)
+               + bottom_overlap * weights) / overlap_rows
+    out = tf.concat([top, overlap, bottom], axis=0)
+    return out
 
 
 def stitch_patches(patches):
-    pass
+    rows = tf.split(patches, num_or_size_splits=n_rows, axis=0)
+    stitched_rows = []
+    for i, row in enumerate(rows):
+        stitched_row = patches[i * n_cols]
+        for j in range(1, n_cols):
+            stitched_row = stitch_to_right(
+                stitched_row, patches[i * n_cols + j])
+        stitched_rows.append(stitched_row)
 
-
+    out = stitched_rows[0]
+    for i in range(1, n_rows):
+        out = stitch_to_bottom(out, stitched_rows[i])
+    out = tf.expand_dims(out, axis=0)
+    out = ops.non_max_suppression(out, window_size=3)
+    out = tf.squeeze(out)
+    return out
 
 
 def load_graph_def(frozen_graph_filename):
@@ -123,8 +161,15 @@ def run_inference(img_files):
     graph_def = load_graph_def(frozen_model_filename)
     with tf.get_default_graph().as_default() as g:
         tf.import_graph_def(graph_def)
+
     tf_images = g.get_tensor_by_name('import/images:0')
     heatmap = g.get_tensor_by_name('import/heatmaps:0')
+
+    tf_patches = tf.placeholder(
+        tf.float32,
+        shape=[n_rows * n_cols, patch_h / out_stride,
+               patch_w / out_stride, 3])
+    tf_out = stitch_patches(tf_patches)
     sess = tf.Session(graph=g)
     sum_t1, sum_t2, sum_t3 = 0., 0., 0.
 
@@ -144,19 +189,21 @@ def run_inference(img_files):
         if count > n_skip:  # skip first few inferences
             sum_t2 += t2 - t1
 
-        out = np.zeros_like(image, dtype=np.float32)
-        # combine the patches using some logic
-        # e.g. here I simply use maximum
-        for i, (y0, x0) in enumerate(patches_top_left):
-            out[y0:y0 + patch_h, x0:x0 + patch_h] = np.maximum(
-                out[y0:y0 + patch_h, x0:x0 + patch_h],
-                cv2.resize(heatmap_pred[i], (patch_w, patch_h)))
+        # out = np.zeros_like(image, dtype=np.float32)
+        # # combine the patches using some logic
+        # # e.g. here I simply use maximum
+        # for i, (y0, x0) in enumerate(patches_top_left):
+        #     out[y0:y0 + patch_h, x0:x0 + patch_h] = np.maximum(
+        #         out[y0:y0 + patch_h, x0:x0 + patch_h],
+        #         cv2.resize(heatmap_pred[i], (patch_w, patch_h)))
+        out = sess.run(tf_out, feed_dict={tf_patches: heatmap_pred})
         # some post-processing
-        threshold = 0.25
+        threshold = 0.5
         out[out > threshold] = 1.
         out[out < threshold] = 0.
         out = (255. * out).astype(np.uint8)
         t3 = time.time()
+        out = cv2.resize(out, (img_w, img_h))
         if count > n_skip:  # skip first few inferences
             sum_t3 += t3 - t2
 
