@@ -135,36 +135,17 @@ def load_graph_def(frozen_graph_filename):
     return graph_def
 
 
-# graph = load_graph(frozen_model_filename)
-# input_image = graph.get_tensor_by_name('placeholder/image:0')
-# tf_batch_images = graph.get_tensor_by_name('batch_images')
-# tf_images = graph.get_tensor_by_name('import/images:0')
-# heatmap = graph.get_tensor_by_name('import/heatmaps:0')
-
-# postprocess_graph = tf.Graph()
-# with postprocess_graph.as_default():
-#     tf_heatmaps = tf.placeholder(tf.float32, shape=[6, 40, 40, 3])
-#     tf_out = tf.zeros((432, 768, 3))
-#     def map_fn(in_, heatmap_):
-#         out = tf.maximum()
-#
-#     for i in range(6):
-#         heatmap_plane = tf.foldl(map_fn, tf_heatmaps[i],
-#                                  initializer=heatmap_plane,
-#                                  back_prop=False)
-
-
 def run_inference(img_files):
+    # pre-preprocessing graph
     input_image = tf.placeholder(tf.float32, shape=[img_h, img_w, 3])
     tf_batch_images = create_patches(input_image)
-
+    # network inference graph
     graph_def = load_graph_def(frozen_model_filename)
     with tf.get_default_graph().as_default() as g:
         tf.import_graph_def(graph_def)
-
     tf_images = g.get_tensor_by_name('import/images:0')
     heatmap = g.get_tensor_by_name('import/heatmaps:0')
-
+    # post-processing graph
     tf_patches = tf.placeholder(
         tf.float32,
         shape=[n_rows * n_cols, patch_h / out_stride,
@@ -189,15 +170,8 @@ def run_inference(img_files):
         if count > n_skip:  # skip first few inferences
             sum_t2 += t2 - t1
 
-        # out = np.zeros_like(image, dtype=np.float32)
-        # # combine the patches using some logic
-        # # e.g. here I simply use maximum
-        # for i, (y0, x0) in enumerate(patches_top_left):
-        #     out[y0:y0 + patch_h, x0:x0 + patch_h] = np.maximum(
-        #         out[y0:y0 + patch_h, x0:x0 + patch_h],
-        #         cv2.resize(heatmap_pred[i], (patch_w, patch_h)))
         out = sess.run(tf_out, feed_dict={tf_patches: heatmap_pred})
-        # some post-processing
+        # some additional post-processing
         threshold = 0.5
         out[out > threshold] = 1.
         out[out < threshold] = 0.
