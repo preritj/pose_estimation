@@ -21,6 +21,20 @@ def combined_static_and_dynamic_shape(tensor):
     return combined_shape
 
 
+def upsample(x):
+    shape = x.get_shape().as_list()
+    r1 = tf.reshape(x, [shape[0], shape[1] * shape[2], 1, shape[3]])
+    r1_l = tf.pad(r1, [[0, 0], [0, 0], [0, 1], [0, 0]])
+    r1_r = tf.pad(r1, [[0, 0], [0, 0], [1, 0], [0, 0]])
+    r2 = tf.add(r1_l, r1_r)
+    r3 = tf.reshape(r2, [shape[0], shape[1], shape[2] * 2, shape[3]])
+    r3_l = tf.pad(r3, [[0, 0], [0, 0], [0, shape[2] * 2], [0, 0]])
+    r3_r = tf.pad(r3, [[0, 0], [0, 0], [shape[2] * 2, 0], [0, 0]])
+    r4 = tf.add(r3_l, r3_r)
+    r5 = tf.reshape(r4, [shape[0], shape[1] * 2, shape[2] * 2, shape[3]])
+    return r5
+
+
 def nearest_neighbor_upsampling(input_tensor, scale):
     """Nearest neighbor upsampling implementation.
     Nearest neighbor upsampling function that maps input tensor with shape

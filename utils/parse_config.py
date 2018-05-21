@@ -45,7 +45,8 @@ class TrainConfig(yaml.YAMLObject):
                  preprocess=None,
                  vecmap_loss_weight=1.,
                  bbox_clf_weight=1.,
-                 bbox_reg_weight=1.):
+                 bbox_reg_weight=1.,
+                 quantize=False):
         self.is_training = is_training
         if model_dir is None:
             model_dir = './models'
@@ -77,6 +78,7 @@ class TrainConfig(yaml.YAMLObject):
         self.vecmap_loss_weight = vecmap_loss_weight
         self.bbox_clf_weight = bbox_clf_weight
         self.bbox_reg_weight = bbox_reg_weight
+        self.quantize = quantize
 
     def __repr__(self):
         return 'train_config'

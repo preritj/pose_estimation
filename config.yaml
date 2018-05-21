@@ -87,7 +87,7 @@ model_dir: './models'
 num_epochs: 0
 learning_rate: 0.001
 learning_rate_decay:
-  decay_steps: 2000
+  decay_steps: 4000
   decay_rate: 0.985
 
 batch_size: 32
@@ -138,6 +138,8 @@ vecmap_loss_weight: .1
 bbox_clf_weight: 5.
 bbox_reg_weight: 10.
 
+quantize: False
+
 ###########################################
 # model parameters
 ###########################################
@@ -167,6 +169,7 @@ skip_layers:
   - InvertedResidual_160_2
 
 fpn_depth: 96
+
 
 ###########################################
 # inference parameters
