@@ -144,17 +144,63 @@ class Inference(object):
             all_anchors.append(anchors)
         return tf.concat(all_anchors, axis=0)
 
-    def get_bboxes(self, bbox_probs, bbox_regs, indices):
-        bboxes = tf.gather(bbox_regs, indices)
-        anchors = tf.gather(self.anchors, indices)
-        bboxes = bbox_decode(
-            bboxes, anchors, self.model_cfg.scale_factors)
-        scores = tf.gather(bbox_probs, indices)
-        selected_indices = tf.image.non_max_suppression(
-            bboxes, scores,
-            max_output_size=10,
-            iou_threshold=0.5)
-        return selected_indices
+    def get_bboxes(self, bbox_probs, bbox_regs):
+        patches_top = np.repeat(
+            self.strides_rows * np.arange(self.n_rows), self.n_cols)
+        patches_left = np.tile(
+            self.strides_cols * np.arange(self.n_cols), self.n_rows)
+        n_patches = self.n_rows * self.n_cols
+        _, bbox_probs = tf.split(
+            bbox_probs,
+            num_or_size_splits=2,
+            axis=1)
+        bbox_probs = tf.split(
+            tf.squeeze(bbox_probs),
+            num_or_size_splits=n_patches,
+            axis=0)
+        bbox_regs = tf.split(
+            bbox_regs,
+            num_or_size_splits=n_patches,
+            axis=0)
+        bboxes = []
+
+        for i in range(n_patches):
+            indices = tf.squeeze(tf.where(
+                tf.greater(bbox_probs[i], 0.5)))
+
+            def _get_bboxes():
+                boxes = tf.gather(bbox_regs[i], indices)
+                anchors = tf.gather(self.anchors, indices)
+                boxes = bbox_decode(
+                    boxes, anchors, self.model_cfg.scale_factors)
+                scores = tf.gather(bbox_probs[i], indices)
+                selected_indices = tf.image.non_max_suppression(
+                    boxes, scores,
+                    max_output_size=10,
+                    iou_threshold=0.7)
+                boxes = tf.gather(boxes, selected_indices)
+                boxes *= tf.constant(
+                    [self.patch_h,
+                     self.patch_w,
+                     self.patch_h,
+                     self.patch_w],
+                    dtype=tf.float32)
+                delta = tf.constant(
+                    [patches_top[i],
+                     patches_left[i],
+                     patches_top[i],
+                     patches_left[i]],
+                    dtype=tf.float32)
+                boxes += delta
+                return boxes
+
+            bboxes_i = tf.cond(
+                tf.greater(tf.rank(indices), 0),
+                true_fn=_get_bboxes,
+                false_fn=lambda: tf.constant([[-1, -1, -1, -1]],
+                                             tf.float32))
+            bboxes.append(bboxes_i)
+        return tf.concat(bboxes, axis=0)
 
     def preprocess_graph(self):
         """Creates graph for preprocessing"""
@@ -192,13 +238,15 @@ class Inference(object):
                    self.patch_h / self.out_stride,
                    self.patch_w / self.out_stride,
                    self.col_channels])
-        indices = tf.placeholder(tf.int32, shape=[None])
-        bbox_probs = tf.placeholder(tf.float32, shape=[None])
+        bbox_probs = tf.placeholder(tf.float32, shape=[None, 2])
         bbox_regs = tf.placeholder(tf.float32, shape=[None, 4])
         keypoints = self.stitch_patches(heatmaps)
-        bboxes = self.get_bboxes(bbox_probs, bbox_regs, indices)
+        bboxes = self.get_bboxes(bbox_probs, bbox_regs)
         return {'heatmaps': heatmaps,
-                'keypoints': keypoints}
+                'bbox_probs': bbox_probs,
+                'bbox_regs': bbox_regs,
+                'keypoints': keypoints,
+                'bboxes': bboxes}
 
     def _run_inference(self, sess, image):
         t0 = time.time()
@@ -207,7 +255,7 @@ class Inference(object):
             feed_dict={self.preprocess_tensors['image']: image})
         t1 = time.time()
 
-        heatmaps, vecmaps, bbox_classes, bbox_regs = sess.run(
+        heatmaps, vecmaps, bbox_probs, bbox_regs = sess.run(
             [self.network_tensors['heatmaps'],
              self.network_tensors['vecmaps'],
              self.network_tensors['bbox_classes'],
@@ -215,8 +263,12 @@ class Inference(object):
             feed_dict={self.network_tensors['patches']: patches})
         t2 = time.time()
 
-        # for i in range(self.n_rows * self.n_cols):
-        #     indices = np.squeeze(np.where(bbox_classes[i], 0.5))
+        feed_dict = {
+            self.postprocess_tensors['bbox_probs']: bbox_probs,
+            self.postprocess_tensors['bbox_regs']: bbox_regs
+        }
+        bboxes = sess.run(
+            self.postprocess_tensors['bboxes'], feed_dict=feed_dict)
 
         out = sess.run(
             self.postprocess_tensors['keypoints'],
@@ -227,10 +279,16 @@ class Inference(object):
         out[out < threshold] = 0.
         out = (255. * out).astype(np.uint8)
         t3 = time.time()
-        return out, [t0, t1, t2, t3]
+        return out, bboxes, [t0, t1, t2, t3]
 
-    def display_output(self, image, out):
+    def display_output(self, image, out, bboxes):
         out = cv2.resize(out, (self.img_w, self.img_h))
+        for box in bboxes:
+            if len(box) == 0:
+                continue
+            ymin, xmin, ymax, xmax = box
+            out = cv2.rectangle(
+                out, (xmin, ymin), (xmax, ymax), (0, 0, 255), 1)
         # back to BGR for opencv display
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         out = cv2.addWeighted(image, 0.4, out, 0.6, 0)
@@ -252,9 +310,9 @@ class Inference(object):
             for img_file in img_files:
                 image = cv2.imread(img_file)
                 image = self.preprocess_image(image)
-                out, t = self._run_inference(sess, image)
+                out, bboxes, t = self._run_inference(sess, image)
                 stats.update(t)
-                if not self.display_output(image, out):
+                if not self.display_output(image, out, bboxes):
                     break
         elif input_type == 'video':
             video_file = self.infer_cfg.video
@@ -264,9 +322,9 @@ class Inference(object):
                 if not ret:
                     break
                 image = self.preprocess_image(image)
-                out, t = self._run_inference(sess, image)
+                out, bboxes, t = self._run_inference(sess, image)
                 stats.update(t)
-                if not self.display_output(image, out):
+                if not self.display_output(image, out, bboxes):
                     break
             cap.release()
         elif input_type == 'camera':
