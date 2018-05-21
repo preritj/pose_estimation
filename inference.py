@@ -6,7 +6,7 @@ import time
 import argparse
 from glob import glob
 from utils.ops import non_max_suppression
-from utils.bboxes import generate_anchors
+from utils.bboxes import generate_anchors, bbox_decode
 from utils.parse_config import parse_config
 
 
@@ -26,6 +26,7 @@ class Inference(object):
         self.strides_rows, self.strides_cols = self.infer_cfg.strides
         self.n_rows = int(np.ceil(self.img_h / self.patch_h))
         self.n_cols = int(np.ceil(self.img_w / self.patch_w))
+        self.anchors = self.generate_anchors()
         self.preprocess_tensors = self.preprocess_graph()
         self.network_tensors = self.network_forward_pass()
         self.postprocess_tensors = self.postprocess_graph()
@@ -127,50 +128,33 @@ class Inference(object):
         out = tf.squeeze(out)
         return out
 
-    # def get_bboxes(self, patches, bbox_probs, bbox_regs):
-    #     for i in range(self.n_rows * self.n_cols):
-    #         indices = tf.squeeze(tf.where(
-    #             tf.greater(bbox_probs[i], 0.5)))
-    #
-    #         def _draw_bboxes():
-    #             img = tf.squeeze(patches[i])
-    #             bboxes = tf.gather(bbox_regs[i], indices)
-    #             # bboxes = tf.zeros_like(bboxes)
-    #             anchors = tf.gather(all_anchors, indices)
-    #             bboxes = bbox_decode(
-    #                 bboxes, anchors, self.model_cfg.scale_factors)
-    #             # bboxes = tf.expand_dims(bboxes, axis=0)
-    #             scores = tf.gather(bbox_probs[i], indices)
-    #             selected_indices = tf.image.non_max_suppression(
-    #                 bboxes, scores,
-    #                 max_output_size=10,
-    #                 iou_threshold=0.5)
-    #             bboxes = tf.gather(bboxes, selected_indices)
-    #             out_img = tf.py_func(vis.visualize_bboxes_on_image,
-    #                                  [img, bboxes], tf.uint8)
-    #             return tf.expand_dims(out_img, axis=0)
-    #             # return tf.image.draw_bounding_boxes(
-    #             #    images[i], bboxes)
-    #
-    #         out_image = tf.cond(
-    #             tf.greater(tf.rank(indices), 0),
-    #             true_fn=_draw_bboxes,
-    #             false_fn=lambda: images[i])
-    #         out_images.append(out_image)
+    def generate_anchors(self):
+        all_anchors = []
+        for i, (base_anchor_size, stride) in enumerate(zip(
+                self.model_cfg.base_anchor_sizes,
+                self.model_cfg.anchor_strides)):
+            grid_shape = tf.constant(
+                self.model_cfg.input_shape, tf.int32) / stride
+            anchors = generate_anchors(
+                grid_shape=grid_shape,
+                base_anchor_size=base_anchor_size,
+                stride=stride,
+                scales=self.model_cfg.anchor_scales,
+                aspect_ratios=self.model_cfg.anchor_ratios)
+            all_anchors.append(anchors)
+        return tf.concat(all_anchors, axis=0)
 
-    def create_placeholders(self):
-        tf_placeholders = {
-            'image': tf.placeholder(
-                tf.float32,
-                shape=[self.img_h, self.img_w, self.col_channels]),
-            'patches': tf.placeholder(
-                tf.float32,
-                shape=[self.n_rows * self.n_cols,
-                       self.patch_h / self.out_stride,
-                       self.patch_w / self.out_stride,
-                       self.col_channels])
-        }
-        return tf_placeholders
+    def get_bboxes(self, bbox_probs, bbox_regs, indices):
+        bboxes = tf.gather(bbox_regs, indices)
+        anchors = tf.gather(self.anchors, indices)
+        bboxes = bbox_decode(
+            bboxes, anchors, self.model_cfg.scale_factors)
+        scores = tf.gather(bbox_probs, indices)
+        selected_indices = tf.image.non_max_suppression(
+            bboxes, scores,
+            max_output_size=10,
+            iou_threshold=0.5)
+        return selected_indices
 
     def preprocess_graph(self):
         """Creates graph for preprocessing"""
@@ -208,7 +192,11 @@ class Inference(object):
                    self.patch_h / self.out_stride,
                    self.patch_w / self.out_stride,
                    self.col_channels])
+        indices = tf.placeholder(tf.int32, shape=[None])
+        bbox_probs = tf.placeholder(tf.float32, shape=[None])
+        bbox_regs = tf.placeholder(tf.float32, shape=[None, 4])
         keypoints = self.stitch_patches(heatmaps)
+        bboxes = self.get_bboxes(bbox_probs, bbox_regs, indices)
         return {'heatmaps': heatmaps,
                 'keypoints': keypoints}
 
@@ -219,10 +207,16 @@ class Inference(object):
             feed_dict={self.preprocess_tensors['image']: image})
         t1 = time.time()
 
-        heatmaps = sess.run(
-            self.network_tensors['heatmaps'],
+        heatmaps, vecmaps, bbox_classes, bbox_regs = sess.run(
+            [self.network_tensors['heatmaps'],
+             self.network_tensors['vecmaps'],
+             self.network_tensors['bbox_classes'],
+             self.network_tensors['bbox_regs']],
             feed_dict={self.network_tensors['patches']: patches})
         t2 = time.time()
+
+        # for i in range(self.n_rows * self.n_cols):
+        #     indices = np.squeeze(np.where(bbox_classes[i], 0.5))
 
         out = sess.run(
             self.postprocess_tensors['keypoints'],
