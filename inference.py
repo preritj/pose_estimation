@@ -27,9 +27,12 @@ class Inference(object):
         self.n_rows = int(np.ceil(self.img_h / self.patch_h))
         self.n_cols = int(np.ceil(self.img_w / self.patch_w))
         self.anchors = self.generate_anchors()
-        self.preprocess_tensors = self.preprocess_graph()
-        self.network_tensors = self.network_forward_pass()
-        self.postprocess_tensors = self.postprocess_graph()
+        with tf.device('/cpu:0'):
+            self.preprocess_tensors = self.preprocess_graph()
+        with tf.device('/gpu:0'):
+            self.network_tensors = self.network_forward_pass()
+        with tf.device('/cpu:0'):
+            self.postprocess_tensors = self.postprocess_graph()
 
     def preprocess_image(self, image):
         # tensorflow expects RGB!
@@ -145,6 +148,7 @@ class Inference(object):
         return tf.concat(all_anchors, axis=0)
 
     def get_bboxes(self, bbox_probs, bbox_regs):
+        # TODO : come up with a strategy to stitch patches for bboxes
         patches_top = np.repeat(
             self.strides_rows * np.arange(self.n_rows), self.n_cols)
         patches_left = np.tile(
@@ -162,7 +166,7 @@ class Inference(object):
             bbox_regs,
             num_or_size_splits=n_patches,
             axis=0)
-        bboxes = []
+        bboxes, scores = [], []
 
         for i in range(n_patches):
             indices = tf.squeeze(tf.where(
@@ -173,12 +177,8 @@ class Inference(object):
                 anchors = tf.gather(self.anchors, indices)
                 boxes = bbox_decode(
                     boxes, anchors, self.model_cfg.scale_factors)
-                scores = tf.gather(bbox_probs[i], indices)
-                selected_indices = tf.image.non_max_suppression(
-                    boxes, scores,
-                    max_output_size=10,
-                    iou_threshold=0.7)
-                boxes = tf.gather(boxes, selected_indices)
+                scores_ = tf.gather(bbox_probs[i], indices)
+                scores_ = tf.expand_dims(scores_, axis=1)
                 boxes *= tf.constant(
                     [self.patch_h,
                      self.patch_w,
@@ -192,15 +192,25 @@ class Inference(object):
                      patches_left[i]],
                     dtype=tf.float32)
                 boxes += delta
-                return boxes
+                return tf.concat([boxes, scores_], axis=1)
 
-            bboxes_i = tf.cond(
+            def _default_bboxes():
+                return tf.constant([[-1, -1, -1, -1, 0]],
+                                   tf.float32)
+
+            bboxes_scores = tf.cond(
                 tf.greater(tf.rank(indices), 0),
                 true_fn=_get_bboxes,
-                false_fn=lambda: tf.constant([[-1, -1, -1, -1]],
-                                             tf.float32))
-            bboxes.append(bboxes_i)
-        return tf.concat(bboxes, axis=0)
+                false_fn=_default_bboxes)
+            bboxes.append(bboxes_scores[:, :4])
+            scores.append(bboxes_scores[:, -1])
+        bboxes = tf.concat(bboxes, axis=0)
+        scores = tf.concat(scores, axis=0)
+        selected_indices = tf.image.non_max_suppression(
+            bboxes, scores,
+            max_output_size=10,
+            iou_threshold=0.7)
+        return tf.gather(bboxes, selected_indices)
 
     def preprocess_graph(self):
         """Creates graph for preprocessing"""
