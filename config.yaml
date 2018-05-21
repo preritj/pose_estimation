@@ -176,5 +176,43 @@ fpn_depth: 96
 ###########################################
 --- !infer
 model_dir: models/latest
-input_shape: [320, 320]
-batch_size: 8
+frozen_model: frozen_model.pb
+network_input_shape: [320, 320]
+
+# out_stride determines the output shape of network
+# For example, if input image is 320 x 320
+# With stride = 8, output heatmap is 40 x 40
+out_stride: 8
+
+# raw image is downsized to resize_shape [H, W]
+# NOTE : Tips for resizing:
+# * For speed, downsize image as much as possible
+#   but this usually results in loss of accuracy
+# * For best speed-accuracy compromise, resize image
+#   so that network_input_shape dimension is
+#   2 to 4 times bbox dimension
+#   where dimension is defined as sqrt(H * W)
+# * Try to preserve aspect ratio as far as possible
+# Example:
+#   [320, 569] for lab videos
+#   [456, 800] for Walmart videos
+resize_shape: [320, 569]
+
+# overlapping patches are encouraged
+# for more robust prediction near edge of patches
+# overlap is determined by the strides
+# which is the distance between two overlapping patches
+# [strides-y, strides-x]
+# Example:
+#   [1, 249] for lab videos
+#   [136, 240] for Walmart videos
+strides: [1, 249]
+
+# input_type can be images, video or camera
+input_type: video
+# images can be a list or use *
+# images: /media/easystore/TrainData/Walmart/Round1/Recording_2/20180308_*.jpg
+images: /media/easystore/TrainData/Lab/April20/Recording_44/20180420_*.jpg
+
+video: /media/easystore/TrainData/Lab/April20/Recording_44/20180420_0000000.avi
+

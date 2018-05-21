@@ -438,7 +438,7 @@ class Trainer(object):
         else:
             NotImplementedError("{} not implemented".format(model_name))
 
-        h, w = self.infer_cfg.input_shape
+        h, w = self.infer_cfg.network_input_shape
         inputs = {'images': tf.placeholder(tf.float32, [None, h, w, 3],
                                            name='images')}
         predictions = model.predict(inputs, is_training=False)
@@ -447,8 +447,12 @@ class Trainer(object):
             # FakeQuantization nodes and fold batchnorm for eval.
             tf.contrib.quantize.create_eval_graph()
         heatmaps = tf.nn.sigmoid(predictions['heatmaps'], name='heatmaps')
+        vecmaps = tf.identity(predictions['vecmaps'], name='vecmaps')
+        bbox_clf_logits = predictions['bbox_clf_logits']
+        bbox_classes = tf.nn.softmax(bbox_clf_logits, name='bbox_classes')
+        bbox_regs = tf.identity(predictions['bbox_regs'], name='bbox_regs')
 
-        output_nodes = ['heatmaps']
+        output_nodes = ['heatmaps', 'vecmaps', 'bbox_classes', 'bbox_regs']
 
         for n in tf.get_default_graph().as_graph_def().node:
             print(n.name)

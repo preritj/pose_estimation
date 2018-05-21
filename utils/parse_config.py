@@ -135,14 +135,24 @@ class InferConfig(yaml.YAMLObject):
     yaml_tag = u'!infer'
 
     def __init__(self,
-                 model_dir='models/latest',
-                 input_shape=None,
-                 batch_size=1):
+                 model_dir=None,
+                 frozen_model=None,
+                 network_input_shape=None,
+                 out_stride=8,
+                 resize_shape=None,
+                 strides=None,
+                 input_type=None,
+                 images=None,
+                 video=None):
         self.model_dir = model_dir
-        if input_shape is None:
-            input_shape = [224, 224]
-        self.input_shape = input_shape
-        self.batch_size = batch_size
+        self.frozen_model = frozen_model
+        self.network_input_shape = network_input_shape
+        self.out_stride = out_stride
+        self.resize_shape = resize_shape
+        self.strides = strides
+        self.input_type = input_type
+        self.images = images
+        self.video = video
 
     def __repr__(self):
         return 'infer_config'
