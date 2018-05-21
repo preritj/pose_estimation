@@ -1,0 +1,49 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{e2d0233f-d3d6-45e4-a7fd-c30a518dc947}</ProjectGuid>
+    <ProjectHome />
+    <StartupFile>inference_video.py</StartupFile>
+    <SearchPath />
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
+    <LaunchProvider>Standard Python launcher</LaunchProvider>
+    <InterpreterId />
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
+  <PropertyGroup>
+    <VisualStudioVersion Condition=" '$(VisualStudioVersion)' == '' ">10.0</VisualStudioVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="dataset\avaRetail.py" />
+    <Compile Include="dataset\coco.py" />
+    <Compile Include="dataset\data_reader.py" />
+    <Compile Include="dataset\mpii.py" />
+    <Compile Include="dataset\poseTrack.py" />
+    <Compile Include="dataset\pose_data.py" />
+    <Compile Include="inference.py" />
+    <Compile Include="inference_video.py" />
+    <Compile Include="model\base_model.py" />
+    <Compile Include="model\mobilenet_pose.py" />
+    <Compile Include="nets\mobilenet_v2.py" />
+    <Compile Include="nets\__init__.py" />
+    <Compile Include="train.py" />
+    <Compile Include="utils\bboxes.py" />
+    <Compile Include="utils\dataset_util.py" />
+    <Compile Include="utils\ops.py" />
+    <Compile Include="utils\parse_config.py" />
+    <Compile Include="utils\tfrecord_util.py" />
+    <Compile Include="utils\visualize.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="dataset" />
+    <Folder Include="model" />
+    <Folder Include="nets" />
+    <Folder Include="utils" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
+</Project>
