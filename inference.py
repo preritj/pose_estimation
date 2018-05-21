@@ -5,6 +5,9 @@ import os
 import time
 import argparse
 from glob import glob
+import urllib.request
+import requests
+from requests.auth import HTTPBasicAuth
 from utils.ops import non_max_suppression
 from utils.bboxes import generate_anchors, bbox_decode
 from utils.parse_config import parse_config
@@ -293,12 +296,13 @@ class Inference(object):
 
     def display_output(self, image, out, bboxes):
         out = cv2.resize(out, (self.img_w, self.img_h))
-        for box in bboxes:
-            if len(box) == 0:
-                continue
-            ymin, xmin, ymax, xmax = box
-            out = cv2.rectangle(
-                out, (xmin, ymin), (xmax, ymax), (0, 0, 255), 1)
+        if self.infer_cfg.display_bbox:
+            for box in bboxes:
+                if len(box) == 0:
+                    continue
+                ymin, xmin, ymax, xmax = box
+                out = cv2.rectangle(
+                    out, (xmin, ymin), (xmax, ymax), (0, 0, 255), 1)
         # back to BGR for opencv display
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         out = cv2.addWeighted(image, 0.4, out, 0.6, 0)
@@ -338,7 +342,18 @@ class Inference(object):
                     break
             cap.release()
         elif input_type == 'camera':
-            pass
+            cam_url = self.infer_cfg.camera
+            cap = cv2.VideoCapture(cam_url)
+            while cap.isOpened():
+                ret, image = cap.read()
+                if not ret:
+                    break
+                image = self.preprocess_image(image)
+                out, bboxes, t = self._run_inference(sess, image)
+                stats.update(t)
+                if not self.display_output(image, out, bboxes):
+                    break
+            cap.release()
         else:
             raise RuntimeError(
                 "input type {} not supported".format(input_type))

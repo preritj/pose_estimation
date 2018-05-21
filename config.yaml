@@ -196,7 +196,7 @@ out_stride: 8
 # Example:
 #   [320, 569] for lab videos
 #   [456, 800] for Walmart videos
-resize_shape: [320, 569]
+resize_shape: [320, 426]
 
 # overlapping patches are encouraged
 # for more robust prediction near edge of patches
@@ -206,13 +206,17 @@ resize_shape: [320, 569]
 # Example:
 #   [1, 249] for lab videos
 #   [136, 240] for Walmart videos
-strides: [1, 249]
+strides: [1, 106]
 
 # input_type can be images, video or camera
-input_type: video
+input_type: camera
 # images can be a list or use *
 # images: /media/easystore/TrainData/Walmart/Round1/Recording_2/20180308_*.jpg
 images: /media/easystore/TrainData/Lab/April20/Recording_44/20180420_*.jpg
 
 video: /media/easystore/TrainData/Lab/April20/Recording_44/20180420_0000000.avi
+
+camera: http://root:123456@192.168.1.13/mjpg/video.mjpg
+
+display_bbox: false
 

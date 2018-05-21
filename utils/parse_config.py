@@ -143,7 +143,9 @@ class InferConfig(yaml.YAMLObject):
                  strides=None,
                  input_type=None,
                  images=None,
-                 video=None):
+                 video=None,
+                 camera=None,
+                 display_bbox=False):
         self.model_dir = model_dir
         self.frozen_model = frozen_model
         self.network_input_shape = network_input_shape
@@ -153,6 +155,8 @@ class InferConfig(yaml.YAMLObject):
         self.input_type = input_type
         self.images = images
         self.video = video
+        self.camera = camera
+        self.display_bbox = display_bbox
 
     def __repr__(self):
         return 'infer_config'
