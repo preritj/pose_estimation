@@ -29,10 +29,10 @@ datasets:
 #    tfrecord_path: tfrecords/val2017.records
 #    annotation_files: annotations/person_keypoints_val2017.json
   - name: ava
-    data_dir: /media/admin-u/easystore/TrainData
+    data_dir: /media//easystore/TrainData
     img_dir: .
-    tfrecord_files: tfrecords/ava*.records
-    annotation_files: Annotations/ava*.json
+    tfrecord_files: tfrecords/pose/ava*.records
+    annotation_files: Annotations/pose/ava*.json
     weight: 1.
     overwrite_tfrecord: false
 
@@ -131,7 +131,7 @@ filenames_shuffle_buffer_size: 100
 num_parallel_map_calls: 12  # ~ num of CPU cores or less
 num_readers: 32
 read_block_length: 64
-shuffle_buffer_size: 2048
+shuffle_buffer_size: 4096
 prefetch_size: 64  # ~ 2 x batch-size
 
 vecmap_loss_weight: .1
@@ -147,6 +147,7 @@ quantize: False
 model_name: mobilenet_pose
 input_shape: [320, 320]
 output_shape: [40, 40]
+output_stride: 8
 
 depth_multiplier: 1.
 min_depth: 8
@@ -163,12 +164,8 @@ matched_threshold: 0.7
 force_match_for_gt_bbox: true
 scale_factors: [10., 5.]
 
-skip_layers:
-  - InvertedResidual_32_2
-  - InvertedResidual_64_3
-  - InvertedResidual_160_2
-
-fpn_depth: 96
+backbone_endpoint: layer_14
+final_depth: 96
 
 
 ###########################################

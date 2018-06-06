@@ -5,8 +5,6 @@ from model.mobilenet_pose import MobilenetPose
 import functools
 from dataset.data_reader import PoseDataReader
 from utils.parse_config import parse_config
-from utils.bboxes import (generate_anchors, get_matches,
-                          bbox_decode)
 from utils.dataset_util import keypoints_to_heatmaps_and_vectors
 from utils.ops import non_max_suppression
 import utils.visualize as vis
@@ -18,6 +16,7 @@ try:
 except ImportError:
     print("Horovod module not found, will not use distributed training")
     use_hvd = False
+use_hvd = False
 
 slim = tf.contrib.slim
 DEBUG = False
@@ -43,28 +42,10 @@ class Trainer(object):
         self.cpu_device = '/cpu:0'
         self.param_server_device = '/gpu:0'
 
-    def generate_anchors(self):
-        all_anchors = []
-        for i, (base_anchor_size, stride) in enumerate(zip(
-                self.model_cfg.base_anchor_sizes,
-                self.model_cfg.anchor_strides)):
-            grid_shape = tf.constant(
-                self.model_cfg.input_shape, tf.int32) / stride
-            anchors = generate_anchors(
-                grid_shape=grid_shape,
-                base_anchor_size=base_anchor_size,
-                stride=stride,
-                scales=self.model_cfg.anchor_scales,
-                aspect_ratios=self.model_cfg.anchor_ratios)
-            all_anchors.append(anchors)
-        return tf.concat(all_anchors, axis=0)
-
     def get_features_labels_data(self):
         """returns dataset containing (features, labels)"""
         model_cfg = self.model_cfg
         train_cfg = self.train_cfg
-        anchors = self.generate_anchors()
-        # num_keypoints = len(train_cfg.train_keypoints)
         data_reader = PoseDataReader(self.data_cfg)
         dataset = data_reader.read_data(train_cfg)
 
@@ -81,11 +62,6 @@ class Trainer(object):
                                            [tf.float32, tf.float32])
             return image, heatmaps, vecmaps, bboxes, mask
 
-        # heatmap_fn = functools.partial(
-        #     keypoints_to_heatmaps_and_vectors,
-        #     num_keypoints=num_keypoints,
-        #     grid_shape=model_cfg.output_shape)
-
         dataset = dataset.map(
             heatmap_fn,
             num_parallel_calls=train_cfg.num_parallel_map_calls
@@ -94,16 +70,6 @@ class Trainer(object):
 
         def map_fn(images, heatmaps, vecmaps, bboxes, masks):
             features = {'images': images}
-            classes, regs, weights = get_matches(
-                gt_bboxes=bboxes,
-                pred_bboxes=anchors,
-                unmatched_threshold=model_cfg.unmatched_threshold,
-                matched_threshold=model_cfg.matched_threshold,
-                force_match_for_gt_bbox=model_cfg.force_match_for_gt_bbox,
-                scale_factors=model_cfg.scale_factors)
-            bbox_labels = {'classes': classes,
-                           'regs': regs,
-                           'weights': weights}
             masks.set_shape(model_cfg.input_shape)
             masks = tf.expand_dims(masks, axis=-1)
             masks = tf.image.resize_images(
@@ -111,8 +77,7 @@ class Trainer(object):
             masks = tf.squeeze(masks)
             labels = {'heatmaps': heatmaps,
                       'vecmaps': vecmaps,
-                      'masks': masks,
-                      'bboxes': bbox_labels}
+                      'masks': masks}
             return features, labels
 
         dataset = dataset.map(
@@ -123,20 +88,17 @@ class Trainer(object):
         return dataset
 
     def prepare_tf_summary(self, features, predictions, max_display=3):
-        all_anchors = self.generate_anchors()
         batch_size = self.train_cfg.batch_size
-        images = tf.cast(features['images'], tf.uint8)
+        images_in = tf.cast(features['images'], tf.uint8)
         images = tf.split(
-            images,
+            images_in,
             num_or_size_splits=batch_size,
             axis=0)
         heatmaps_logits = predictions['heatmaps']
         vecmaps = predictions['vecmaps']  # * self.train_cfg.vector_scale
         heatmaps = tf.nn.sigmoid(heatmaps_logits)
         heatmaps = non_max_suppression(heatmaps, 3)
-        # heatmap_out = tf.expand_dims(
-        #     tf.zeros_like(heatmaps[:, :, :, 0]), axis=-1)
-        # heatmap_out = tf.concat([heatmap_out, heatmaps], -1)
+
         heatmaps = tf.split(
             heatmaps,
             num_or_size_splits=batch_size,
@@ -161,54 +123,9 @@ class Trainer(object):
                 [image_i, heatmaps_i, vecmaps_i],
                 tf.uint8)
             heatmap_out.append(tf.expand_dims(out, axis=0))
-        bbox_clf_logits = predictions['bbox_clf_logits']
-        _, bbox_probs = tf.split(
-            tf.nn.softmax(bbox_clf_logits),
-            num_or_size_splits=2,
-            axis=1)
-        bbox_probs = tf.split(
-            tf.squeeze(bbox_probs),
-            num_or_size_splits=batch_size,
-            axis=0)
-        bbox_regs = tf.split(
-            predictions['bbox_regs'],
-            num_or_size_splits=batch_size,
-            axis=0)
-        out_images = []
 
-        for i in range(max_display):
-            indices = tf.squeeze(tf.where(
-                tf.greater(bbox_probs[i], 0.5)))
-
-            def _draw_bboxes():
-                img = tf.squeeze(images[i])
-                bboxes = tf.gather(bbox_regs[i], indices)
-                # bboxes = tf.zeros_like(bboxes)
-                anchors = tf.gather(all_anchors, indices)
-                bboxes = bbox_decode(
-                    bboxes, anchors, self.model_cfg.scale_factors)
-                # bboxes = tf.expand_dims(bboxes, axis=0)
-                scores = tf.gather(bbox_probs[i], indices)
-                selected_indices = tf.image.non_max_suppression(
-                    bboxes, scores,
-                    max_output_size=10,
-                    iou_threshold=0.5)
-                bboxes = tf.gather(bboxes, selected_indices)
-                out_img = tf.py_func(vis.visualize_bboxes_on_image,
-                                     [img, bboxes], tf.uint8)
-                return tf.expand_dims(out_img, axis=0)
-                # return tf.image.draw_bounding_boxes(
-                #    images[i], bboxes)
-
-            out_image = tf.cond(
-                tf.greater(tf.rank(indices), 0),
-                true_fn=_draw_bboxes,
-                false_fn=lambda: images[i])
-            out_images.append(out_image)
-
-        out_images = tf.concat(out_images, axis=0)
         heatmap_out = tf.concat(heatmap_out, axis=0)
-        tf.summary.image('bboxes', out_images, max_display)
+        tf.summary.image('images', images_in[:max_display], max_display)
         tf.summary.image('heatmap', heatmap_out, max_display)
 
     def train(self):
@@ -397,8 +314,6 @@ class Trainer(object):
                 # with tf.device(self.param_server_device):
                 loss = losses['heatmap_loss']
                 loss += train_cfg.vecmap_loss_weight * losses['vecmap_loss']
-                loss += train_cfg.bbox_clf_weight * losses['bbox_clf_loss']
-                loss += train_cfg.bbox_reg_weight * losses['bbox_reg_loss']
                 if self.train_cfg.quantize:
                     # Call the training rewrite which rewrites the graph in-place with
                     # FakeQuantization nodes and folds batchnorm for training. It is
@@ -494,5 +409,5 @@ if __name__ == '__main__':
     assert os.path.exists(config_file), \
         "{} not found".format(config_file)
     trainer = Trainer(config_file)
-    # trainer.train()
-    trainer.freeze_model()
+    trainer.train()
+    # trainer.freeze_model()

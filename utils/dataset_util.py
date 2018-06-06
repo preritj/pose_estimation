@@ -382,9 +382,11 @@ def keypoints_to_heatmaps_and_vectors(
                                  np.arange(-delta, 1 + delta))
     x_mesh, y_mesh = x_mesh.reshape((-1, 1)), y_mesh.reshape((-1, 1))
     heatmap = np.zeros((grid_shape[0], grid_shape[1], num_keypoints))
+    offsetmap = np.zeros((grid_shape[0], grid_shape[1], 2 * num_keypoints))
     vecmap = np.zeros((grid_shape[0], grid_shape[1], n_vec))
     for i in range(num_instances):
         instance_heatmap = np.zeros((grid_shape[0], grid_shape[1], num_keypoints))
+        instance_offsetmap = np.zeros((grid_shape[0], grid_shape[1], 2 * num_keypoints))
         instance_vecmap = np.zeros((grid_shape[0], grid_shape[1], n_vec))
         kp_vis = keypoints_vis[i]
         values = np.tile(kp_vis, int((n - 1) / 2)) * 0.5

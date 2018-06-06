@@ -91,10 +91,11 @@ class ModelConfig(yaml.YAMLObject):
                  model_name=None,
                  input_shape=None,
                  output_shape=None,
+                 output_stride=8,
                  depth_multiplier=1.,
                  min_depth=8,
-                 skip_layers=None,
-                 fpn_depth=96,
+                 backbone_endpoint=None,
+                 final_depth=96,
                  base_anchor_sizes=None,
                  base_anchor_strides=None,
                  anchor_scales=None,
@@ -110,12 +111,11 @@ class ModelConfig(yaml.YAMLObject):
             output_shape = input_shape
         self.input_shape = input_shape
         self.output_shape = output_shape
+        self.output_stride = output_stride
         self.depth_multiplier = depth_multiplier
         self.min_depth = min_depth
-        if skip_layers is None:
-            skip_layers = []
-        self.skip_layers = skip_layers
-        self.fpn_depth = fpn_depth
+        self.backbone_endpoint = backbone_endpoint
+        self.final_depth = final_depth
         self.base_anchor_sizes = base_anchor_sizes
         self.base_anchor_strides = base_anchor_strides
         self.anchor_ratios = anchor_ratios
