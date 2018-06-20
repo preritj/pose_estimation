@@ -120,7 +120,7 @@ class Trainer(object):
         heatmap_vis_fn = functools.partial(
             vis.visualize_heatmaps,
             pairs=self.pairs,
-            threshold=0.05)
+            threshold=0.2)
 
         for i in range(max_display):
             image_i = tf.squeeze(images[i])
