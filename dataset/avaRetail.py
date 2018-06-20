@@ -28,13 +28,22 @@ class AVAretail(PoseData):
             self.imgs[img_id] = {'filename': img_name,
                                  'shape': [height, width]}
             persons = annotations['Persons']
+            labels = annotations['Labels']
+            ignore_patches = []
+            if 'Crowd' in labels.keys():
+                for crowd in labels['Crowd']:
+                    ymin, xmin, ymax, xmax = crowd['Bbox']
+                    patch_pts = [xmin, ymin,
+                                 xmax, ymin,
+                                 xmax, ymax,
+                                 xmin, ymax]
+                    ignore_patches.append(patch_pts)
             if len(persons) == 0:
                 continue
             all_keypoints = [person['Keypoints'] for person in persons
                              if 'Keypoints' in person.keys()]
             if len(all_keypoints) == 0:
                 continue
-            ignore_patches = []
             for person in persons:
                 bbox = None
                 if 'Bbox' in person.keys():

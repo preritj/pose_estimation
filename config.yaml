@@ -87,35 +87,53 @@ model_dir: './models'
 num_epochs: 0
 learning_rate: 0.001
 learning_rate_decay:
-  decay_steps: 4000
-  decay_rate: 0.985
+  decay_steps: 1000
+  decay_rate: 0.99
 
-batch_size: 32
+batch_size: 16
 shuffle: true
 
 train_keypoints:
-  - left_wrist
   - head
+  - left_shoulder
+  - right_shoulder
+  - left_elbow
+  - right_elbow
+  - left_wrist
+  - nose
   - right_wrist
-#  - left_elbow
-#  - right_elbow
-#  - left_shoulder
-#  - right_shoulder
-#  - neck
-#  - nose
-#  - head
+  - neck
+  - left_hip
+  - right_hip
+  - left_knee
+  - right_knee
+  - left_ankle
+  - right_ankle
 
 train_skeletons:
-  - [left_wrist, head]
-  - [right_wrist, head]
+  - [head, nose]
+  - [nose, neck]
+  - [neck, left_shoulder]
+  - [neck, right_shoulder]
+  - [neck, left_hip]
+  - [neck, right_hip]
+  - [left_shoulder, left_elbow]
+  - [right_shoulder, right_elbow]
+  - [left_elbow, left_wrist]
+  - [right_elbow, right_wrist]
+  - [left_hip, left_knee]
+  - [right_hip, right_knee]
+  - [left_knee, left_ankle]
+  - [right_knee, right_ankle]
 
 window_size: 3
-vector_scale: 8.
+vector_scale: 12.
+offset_scale: 8.
 
 augmentation:
   flip_left_right: true
   random_crop: true
-  scale_range: [3., 5.]
+  scale_range: [2.25, 2.75]
 
 preprocess:
   image_resize: [320, 320]
@@ -134,7 +152,8 @@ read_block_length: 64
 shuffle_buffer_size: 4096
 prefetch_size: 64  # ~ 2 x batch-size
 
-vecmap_loss_weight: .1
+vecmap_loss_weight: 0.05
+offsetmap_loss_weight: 0.2
 bbox_clf_weight: 5.
 bbox_reg_weight: 10.
 
@@ -164,8 +183,8 @@ matched_threshold: 0.7
 force_match_for_gt_bbox: true
 scale_factors: [10., 5.]
 
-backbone_endpoint: layer_14
-final_depth: 96
+backbone_endpoint: layer_17
+final_depth: 160
 
 
 ###########################################

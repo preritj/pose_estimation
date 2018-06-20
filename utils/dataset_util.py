@@ -1,5 +1,6 @@
 import tensorflow as tf
 import numpy as np
+import cv2
 
 
 def random_int(maxval, minval=0):
@@ -138,7 +139,7 @@ def random_crop(image, keypoints, bboxes, mask,
 
     crop_size = tf.constant(list(crop_size), tf.float32)
     # cap min scale at 0.5 to prevent bad resolution
-    scale_min = tf.maximum(scale_range[0] * scale_ratio, 0.7)
+    scale_min = tf.maximum(scale_range[0] * scale_ratio, 0.5)
     # max scale has to be greater than min scale (1.1 * min scale)
     scale_max = tf.maximum(scale_range[1] * scale_ratio,
                            1.1 * scale_min)
@@ -365,40 +366,77 @@ def keypoints_to_heatmap_v2(image, keypoints, bboxes, mask,
 
 
 def keypoints_to_heatmaps_and_vectors(
-        keypoints,
+        keypoints, mask,
         pairs=([0, 1], [1, 2]),
         grid_shape=(28, 28),
         window_size=3,
-        vector_scale=20.):
+        vector_scale=20.,
+        offset_scale=20):
     num_instances, num_keypoints, _ = keypoints.shape
     n_vec = 4 * len(pairs)
+    mask = cv2.resize(mask, (grid_shape[1], grid_shape[0]))
+    mask = np.expand_dims(mask, 2)
     grid_shape = np.array(list(grid_shape))
     n = window_size * window_size
     delta = int((window_size - 1) / 2)
     keypoints_vis = keypoints[:, :, 2]
+    keypoints_vis = (keypoints_vis > 0).astype(np.uint8)
+    keypoints_xy = keypoints[:, :, :2] * grid_shape
     keypoints_indices = (keypoints[:, :, :2] * grid_shape).astype(np.uint16)
+    keypoints_xy_delta = keypoints_xy - keypoints_indices - 0.5
     x_center_indices, y_center_indices = keypoints_indices.transpose((2, 0, 1))
+    x_center_float, y_center_float = keypoints_xy.transpose((2, 0, 1))
     x_mesh, y_mesh = np.meshgrid(np.arange(-delta, 1 + delta),
                                  np.arange(-delta, 1 + delta))
+    bilinear_interp = ((1 - np.absolute(2. * x_mesh) / window_size)
+                       * (1 - np.absolute(2. * y_mesh) / window_size))
+    bilinear_interp = bilinear_interp.flatten()
     x_mesh, y_mesh = x_mesh.reshape((-1, 1)), y_mesh.reshape((-1, 1))
     heatmap = np.zeros((grid_shape[0], grid_shape[1], num_keypoints))
-    offsetmap = np.zeros((grid_shape[0], grid_shape[1], 2 * num_keypoints))
+    heatmap_mask = mask * np.ones((grid_shape[0], grid_shape[1], num_keypoints))
+    offsetmap = np.zeros((grid_shape[0], grid_shape[1], num_keypoints, 2))
+    offset_distmap = np.ones((grid_shape[0], grid_shape[1], num_keypoints)) * 100
     vecmap = np.zeros((grid_shape[0], grid_shape[1], n_vec))
     for i in range(num_instances):
+        instance_mask = np.ones((grid_shape[0], grid_shape[1], num_keypoints))
         instance_heatmap = np.zeros((grid_shape[0], grid_shape[1], num_keypoints))
-        instance_offsetmap = np.zeros((grid_shape[0], grid_shape[1], 2 * num_keypoints))
+        instance_offsetmap = np.zeros(
+            (grid_shape[0], grid_shape[1], num_keypoints, 2))
+        instance_offset_distmap = 100 * np.ones(
+            (grid_shape[0], grid_shape[1], num_keypoints))
         instance_vecmap = np.zeros((grid_shape[0], grid_shape[1], n_vec))
         kp_vis = keypoints_vis[i]
-        values = np.tile(kp_vis, int((n - 1) / 2)) * 0.5
-        values = np.concatenate([values, kp_vis, values])
+        values = kp_vis * np.expand_dims(bilinear_interp, 1)
+        values = values.flatten()
+        # values = np.tile(kp_vis, int((n - 1) / 2)) * 0.5
+        # values = np.concatenate([values, kp_vis, values])
+        mask_values = np.tile(kp_vis, n)
         kp_indices = np.repeat(np.expand_dims(np.arange(num_keypoints), 0),
                                n, axis=0)
         vec_indices = np.repeat(np.expand_dims(np.arange(n_vec), 0), n, axis=0)
-        x_indices = (x_center_indices[i] + x_mesh).clip(0, grid_shape[1] - 1)
-        y_indices = (y_center_indices[i] + y_mesh).clip(0, grid_shape[0] - 1)
-        instance_heatmap[y_indices.flatten(), x_indices.flatten(),
-                         kp_indices.flatten()] = values
+        x_indices = (x_center_indices[i] + x_mesh)
+        y_indices = (y_center_indices[i] + y_mesh)
+        x_idx, y_idx = x_indices.flatten(), y_indices.flatten()
+        valid_idx = np.where((x_idx >= 0) & (y_idx >= 0)
+                             & (x_idx <= grid_shape[1] - 1)
+                             & (y_idx <= grid_shape[0] - 1))[0]
+        offset_vals = np.concatenate([x_mesh, y_mesh], axis=1)
+        offset_delta = np.tile(keypoints_xy_delta[i],
+                               (offset_vals.shape[0], 1))
+        offset_vals = np.repeat(offset_vals, num_keypoints, axis=0)
+        offset_vals = offset_vals + offset_delta
+        distances = np.sqrt(offset_vals[:, 0] ** 2 + offset_vals[:, 1] ** 2)
+        indices = (y_idx[valid_idx],
+                   x_idx[valid_idx],
+                   kp_indices.flatten()[valid_idx])
+        instance_heatmap[indices] = values[valid_idx]
+        instance_mask[indices] = mask_values[valid_idx]
+        instance_offsetmap[indices] = offset_vals[valid_idx]
+        instance_offset_distmap[indices] = distances[valid_idx]
         heatmap = np.maximum(heatmap, instance_heatmap)
+        heatmap_mask = np.minimum(heatmap_mask, instance_mask)
+        overwrite = instance_offset_distmap < offset_distmap
+        offsetmap[overwrite] = instance_offsetmap[overwrite]
 
         select_x_indices, select_y_indices, values = [], [], []
         for kp1, kp2 in pairs:
@@ -407,15 +445,27 @@ def keypoints_to_heatmaps_and_vectors(
             if (kp_vis[kp1] == 0) or (kp_vis[kp2] == 0):
                 values += 4 * [np.zeros_like(x_indices[:, kp1])]
             else:
-                values += [x_center_indices[i, kp2] - x_indices[:, kp1],
-                           y_center_indices[i, kp2] - y_indices[:, kp1],
-                           x_center_indices[i, kp1] - x_indices[:, kp2],
-                           y_center_indices[i, kp1] - y_indices[:, kp2]]
-        select_x_indices = np.array(select_x_indices).T
-        select_y_indices = np.array(select_y_indices).T
-        instance_vecmap[select_y_indices.flatten(), select_x_indices.flatten(),
-                        vec_indices.flatten()] = np.array(values).T.flatten()
-        overwrite = (np.absolute(vecmap) < .001)
+                values += [
+                    x_center_float[i, kp2] - x_indices[:, kp1] - 0.5,
+                    y_center_float[i, kp2] - y_indices[:, kp1] - 0.5,
+                    x_center_float[i, kp1] - x_indices[:, kp2] - 0.5,
+                    y_center_float[i, kp1] - y_indices[:, kp2] - 0.5]
+                # values += [x_center_indices[i, kp2] - x_indices[:, kp1],
+                #            y_center_indices[i, kp2] - y_indices[:, kp1],
+                #            x_center_indices[i, kp1] - x_indices[:, kp2],
+                #            y_center_indices[i, kp1] - y_indices[:, kp2]]
+        select_x_indices = np.array(select_x_indices).T.flatten()
+        select_y_indices = np.array(select_y_indices).T.flatten()
+        valid_idx = np.where((select_x_indices >= 0) & (select_y_indices >= 0)
+                             & (select_x_indices <= grid_shape[1] - 1)
+                             & (select_y_indices <= grid_shape[0] - 1))[0]
+        instance_vecmap[
+            select_y_indices[valid_idx],
+            select_x_indices[valid_idx],
+            vec_indices.flatten()[valid_idx]] = \
+            np.array(values).T.flatten()[valid_idx] / vector_scale
+        overwrite = (np.absolute(vecmap) < .00001)
         vecmap[overwrite] = instance_vecmap[overwrite]
-        # vecmap = np.maximum(vecmap, instance_vecmap)
-    return np.float32(heatmap), np.float32(vecmap)
+    offsetmap = np.reshape(offsetmap, (grid_shape[0], grid_shape[1], -1)) / offset_scale
+    return (np.float32(heatmap), np.float32(vecmap),
+            np.float32(offsetmap), np.float32(heatmap_mask))

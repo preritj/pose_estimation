@@ -33,39 +33,53 @@ class Model:
     def predict(self, inputs, is_training=False):
         images = inputs['images']
         preprocessed_inputs = self.preprocess(images)
-        heatmaps, vecmaps = self.build_net(
+        heatmaps, vecmaps, offsetmaps = self.build_net(
             preprocessed_inputs, is_training=is_training)
         prediction = {'heatmaps': heatmaps,
-                      'vecmaps': vecmaps}
+                      'vecmaps': vecmaps,
+                      'offsetmaps': offsetmaps}
         return prediction
 
     def heatmap_loss(self, labels, logits, weights):
         logits = tf.reshape(logits, [-1, self._num_keypoints])
         labels = tf.reshape(labels, [-1, self._num_keypoints])
-        weights = tf.reshape(weights, [-1])
+        weights = tf.reshape(weights, [-1, self._num_keypoints])
         heatmap_loss = tf.nn.sigmoid_cross_entropy_with_logits(
             labels=labels,
             logits=logits
         )
-        heatmap_loss = tf.reduce_sum(heatmap_loss, axis=-1)
+        # heatmap_loss = tf.reduce_sum(heatmap_loss, axis=-1)
         heatmap_loss = tf.reduce_mean(heatmap_loss * weights)
         return heatmap_loss
 
     def vecmap_loss(self, regs_gt, regs_pred):
         weights = tf.cast(tf.greater(tf.abs(regs_gt), EPSILON),
                           tf.float32)
-        weights /= tf.maximum(EPSILON, tf.abs(regs_gt))
+        # weights /= tf.maximum(EPSILON, tf.abs(regs_gt))
         vecmap_loss = tf.losses.absolute_difference(
             labels=regs_gt,
             predictions=regs_pred,
             weights=weights)
         return vecmap_loss
 
+    def offsetmap_loss(self, regs_gt, regs_pred, heatmaps_gt,
+                       heatmaps_weights):
+        weights = tf.cast(heatmaps_gt > EPSILON, tf.float32)
+        weights *= heatmaps_weights
+        weights = tf.tile(weights, [1, 1, 1, 2])
+        offsetmap_loss = tf.losses.absolute_difference(
+            labels=regs_gt,
+            predictions=regs_pred,
+            weights=weights)
+        return offsetmap_loss
+
     def losses(self, prediction, ground_truth):
         heatmaps_logits = prediction['heatmaps']
         vecmaps_regs = prediction['vecmaps']
+        offsetmaps_regs = prediction['offsetmaps']
         heatmaps_gt = ground_truth['heatmaps']
         vecmaps_regs_gt = ground_truth['vecmaps']
+        offsetmaps_regs_gt = ground_truth['offsetmaps']
         mask_weights = ground_truth['masks']
 
         heatmap_loss = self.heatmap_loss(
@@ -75,11 +89,17 @@ class Model:
 
         vecmap_loss = self.vecmap_loss(
             regs_gt=vecmaps_regs_gt,
-            regs_pred=vecmaps_regs
-        )
+            regs_pred=vecmaps_regs)
+
+        offsetmap_loss = self.offsetmap_loss(
+            regs_gt=offsetmaps_regs_gt,
+            regs_pred=offsetmaps_regs,
+            heatmaps_gt=heatmaps_gt,
+            heatmaps_weights=mask_weights)
 
         losses = {'heatmap_loss': heatmap_loss,
-                  'vecmap_loss': vecmap_loss}
+                  'vecmap_loss': vecmap_loss,
+                  'offsetmap_loss': offsetmap_loss}
         # l2_loss = tf.losses.mean_squared_error(
         #     heatmaps_gt, heatmaps_pred,
         #     reduction=tf.losses.Reduction.NONE)

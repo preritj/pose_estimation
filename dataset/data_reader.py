@@ -298,9 +298,4 @@ class PoseDataReader(object):
         dataset = self.augment_data(dataset, train_config)
 
         dataset = self.preprocess_data(dataset, train_config)
-        # heatmap_fn = functools.partial(
-        #     keypoints_to_heatmap,
-        #     num_keypoints=num_keypoints,
-        #     sigma=self.data_cfg.sigma)
-
         return dataset

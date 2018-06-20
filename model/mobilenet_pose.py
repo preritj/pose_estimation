@@ -76,11 +76,19 @@ class MobilenetPose(Model):
                     num_outputs=self.cfg.final_depth,
                     stride=1,
                     scope='vecmap_branch')
+                offsetmap_branch = expanded_conv(
+                    net,
+                    num_outputs=self.cfg.final_depth,
+                    stride=1,
+                    scope='offsetmap_branch')
             heatmap = slim.conv2d(heatmap_branch, self._num_keypoints, [1, 1],
                                   activation_fn=None, normalizer_fn=None,
                                   normalizer_params=None, scope='heatmap')
             vecmap = slim.conv2d(vecmap_branch, self._num_vecs, [1, 1],
                                  activation_fn=None, normalizer_fn=None,
                                  normalizer_params=None, scope='vecmap')
-        return heatmap, vecmap
+            offsetmap = slim.conv2d(offsetmap_branch, 2 * self._num_keypoints, [1, 1],
+                                    activation_fn=None, normalizer_fn=None,
+                                    normalizer_params=None, scope='offsetmap')
+        return heatmap, vecmap, offsetmap
 

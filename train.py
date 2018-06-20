@@ -54,13 +54,15 @@ class Trainer(object):
             pairs=self.pairs,
             grid_shape=model_cfg.output_shape,
             window_size=train_cfg.window_size,
-            vector_scale=train_cfg.vector_scale
+            vector_scale=train_cfg.vector_scale,
+            offset_scale=train_cfg.offset_scale
         )
 
         def heatmap_fn(image, keypoints, bboxes, mask):
-            heatmaps, vecmaps = tf.py_func(_heatmpa_fn, [keypoints],
-                                           [tf.float32, tf.float32])
-            return image, heatmaps, vecmaps, bboxes, mask
+            heatmaps, vecmaps, offsetmaps, mask = tf.py_func(
+                _heatmpa_fn, [keypoints, mask],
+                [tf.float32, tf.float32, tf.float32, tf.float32])
+            return image, heatmaps, vecmaps, offsetmaps, mask
 
         dataset = dataset.map(
             heatmap_fn,
@@ -68,15 +70,16 @@ class Trainer(object):
         )
         dataset = dataset.prefetch(train_cfg.prefetch_size)
 
-        def map_fn(images, heatmaps, vecmaps, bboxes, masks):
+        def map_fn(images, heatmaps, vecmaps, offsetmaps, masks):
             features = {'images': images}
-            masks.set_shape(model_cfg.input_shape)
-            masks = tf.expand_dims(masks, axis=-1)
-            masks = tf.image.resize_images(
-                masks, size=model_cfg.output_shape)
-            masks = tf.squeeze(masks)
+            # masks.set_shape(model_cfg.input_shape)
+            # masks = tf.expand_dims(masks, axis=-1)
+            # masks = tf.image.resize_images(
+            #     masks, size=model_cfg.output_shape)
+            # masks = tf.squeeze(masks)
             labels = {'heatmaps': heatmaps,
                       'vecmaps': vecmaps,
+                      'offsetmaps': offsetmaps,
                       'masks': masks}
             return features, labels
 
@@ -95,9 +98,10 @@ class Trainer(object):
             num_or_size_splits=batch_size,
             axis=0)
         heatmaps_logits = predictions['heatmaps']
-        vecmaps = predictions['vecmaps']  # * self.train_cfg.vector_scale
+        vecmaps = predictions['vecmaps'] * self.train_cfg.vector_scale
+        offsetmaps = predictions['offsetmaps'] * self.train_cfg.offset_scale
         heatmaps = tf.nn.sigmoid(heatmaps_logits)
-        heatmaps = non_max_suppression(heatmaps, 3)
+        heatmaps = non_max_suppression(heatmaps, self.train_cfg.window_size)
 
         heatmaps = tf.split(
             heatmaps,
@@ -107,20 +111,25 @@ class Trainer(object):
             vecmaps,
             num_or_size_splits=batch_size,
             axis=0)
+        offsetmaps = tf.split(
+            offsetmaps,
+            num_or_size_splits=batch_size,
+            axis=0)
         heatmap_out = []
 
         heatmap_vis_fn = functools.partial(
             vis.visualize_heatmaps,
             pairs=self.pairs,
-            threshold=0.2)
+            threshold=0.05)
 
         for i in range(max_display):
             image_i = tf.squeeze(images[i])
             heatmaps_i = tf.squeeze(heatmaps[i])
             vecmaps_i = tf.squeeze(vecmaps[i])
+            offsetmaps_i = tf.squeeze(offsetmaps[i])
             out = tf.py_func(
                 heatmap_vis_fn,
-                [image_i, heatmaps_i, vecmaps_i],
+                [image_i, heatmaps_i, vecmaps_i, offsetmaps_i],
                 tf.uint8)
             heatmap_out.append(tf.expand_dims(out, axis=0))
 
@@ -314,6 +323,7 @@ class Trainer(object):
                 # with tf.device(self.param_server_device):
                 loss = losses['heatmap_loss']
                 loss += train_cfg.vecmap_loss_weight * losses['vecmap_loss']
+                loss += train_cfg.offsetmap_loss_weight * losses['offsetmap_loss']
                 if self.train_cfg.quantize:
                     # Call the training rewrite which rewrites the graph in-place with
                     # FakeQuantization nodes and folds batchnorm for training. It is

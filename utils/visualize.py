@@ -21,7 +21,7 @@ def visualize_bboxes_on_image(image, boxes):
     return image
 
 
-def visualize_heatmaps(image, heatmaps, vecmaps,
+def visualize_heatmaps(image, heatmaps, vecmaps, offsetmaps,
                        pairs=([0, 1], [2, 1]), threshold=0.2):
     heatmaps[heatmaps > threshold] = 1.
     heatmaps[heatmaps <= threshold] = 0.
@@ -45,8 +45,11 @@ def visualize_heatmaps(image, heatmaps, vecmaps,
         for x, y in zip(x_indices_1, y_indices_1):
             x0 = int(scale_w * (x + 0.5))
             y0 = int(scale_h * (y + 0.5))
-            delta_x = scale_w * int(vecmaps[y, x, 4 * i])
-            delta_y = scale_h * int(vecmaps[y, x, 4 * i + 1])
+            delta_x = int(scale_w * (
+                vecmaps[y, x, 4 * i] + offsetmaps[y, x, kp2]))
+            delta_y = int(scale_h * (
+                vecmaps[y, x, 4 * i + 1]
+                + offsetmaps[y, x, num_keypoints + kp2]))
             col = (255. * colors[kp1][:3]).astype(np.uint8)
             col = tuple(map(int, col))
             out_img = cv2.line(out_img, (x0, y0),
@@ -56,8 +59,11 @@ def visualize_heatmaps(image, heatmaps, vecmaps,
         for x, y in zip(x_indices_2, y_indices_2):
             x0 = int(scale_w * (x + 0.5))
             y0 = int(scale_h * (y + 0.5))
-            delta_x = scale_w * int(vecmaps[y, x, 4 * i + 2])
-            delta_y = scale_h * int(vecmaps[y, x, 4 * i + 3])
+            delta_x = int(scale_w * (
+                vecmaps[y, x, 4 * i + 2] + offsetmaps[y, x, kp1]))
+            delta_y = int(scale_h * (
+                vecmaps[y, x, 4 * i + 3]
+                + offsetmaps[y, x, num_keypoints + kp1]))
             col = (255. * colors[kp2][:3]).astype(np.uint8)
             col = tuple(map(int, col))
             out_img = cv2.line(out_img, (x0, y0),
