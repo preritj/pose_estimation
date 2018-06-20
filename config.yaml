@@ -29,7 +29,7 @@ datasets:
 #    tfrecord_path: tfrecords/val2017.records
 #    annotation_files: annotations/person_keypoints_val2017.json
   - name: ava
-    data_dir: /media//easystore/TrainData
+    data_dir: /media/admin-u/data/TrainData
     img_dir: .
     tfrecord_files: tfrecords/pose/ava*.records
     annotation_files: Annotations/pose/ava*.json
@@ -87,8 +87,8 @@ model_dir: './models'
 num_epochs: 0
 learning_rate: 0.001
 learning_rate_decay:
-  decay_steps: 1000
-  decay_rate: 0.99
+  decay_steps: 3000
+  decay_rate: 0.98
 
 batch_size: 16
 shuffle: true
