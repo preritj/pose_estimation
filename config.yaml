@@ -87,8 +87,8 @@ model_dir: './models'
 num_epochs: 0
 learning_rate: 0.001
 learning_rate_decay:
-  decay_steps: 3000
-  decay_rate: 0.98
+  decay_steps: 5000
+  decay_rate: 0.995
 
 batch_size: 16
 shuffle: true
@@ -133,7 +133,7 @@ offset_scale: 8.
 augmentation:
   flip_left_right: true
   random_crop: true
-  scale_range: [2.25, 2.75]
+  scale_range: [2.25, 2.85]
 
 preprocess:
   image_resize: [320, 320]
@@ -152,8 +152,8 @@ read_block_length: 64
 shuffle_buffer_size: 4096
 prefetch_size: 64  # ~ 2 x batch-size
 
-vecmap_loss_weight: 0.05
-offsetmap_loss_weight: 0.2
+vecmap_loss_weight: 0.1
+offsetmap_loss_weight: 1.
 bbox_clf_weight: 5.
 bbox_reg_weight: 10.
 
