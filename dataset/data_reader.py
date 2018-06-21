@@ -9,6 +9,7 @@ import tensorflow as tf
 import functools
 from utils.dataset_util import (
     normalize_bboxes, normalize_keypoints, random_crop,
+    random_brightness, random_contrast,
     random_flip_left_right, keypoints_select, resize)
 
 
@@ -237,7 +238,18 @@ class PoseDataReader(object):
                 num_parallel_calls=train_cfg.num_parallel_map_calls
             )
             dataset = dataset.prefetch(train_cfg.prefetch_size)
-
+        if aug_cfg['random_brightness']:
+            dataset = dataset.map(
+                random_brightness,
+                num_parallel_calls=train_cfg.num_parallel_map_calls
+            )
+            dataset = dataset.prefetch(train_cfg.prefetch_size)
+        if aug_cfg['random_contrast']:
+            dataset = dataset.map(
+                random_contrast,
+                num_parallel_calls=train_cfg.num_parallel_map_calls
+            )
+            dataset = dataset.prefetch(train_cfg.prefetch_size)
         return dataset
 
     def preprocess_data(self, dataset, train_cfg):

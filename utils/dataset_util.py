@@ -185,6 +185,21 @@ def random_crop(image, keypoints, bboxes, mask,
     return new_image, new_keypoints, new_bboxes, new_mask
 
 
+def random_brightness(image, keypoints, bboxes, mask):
+    image = tf.image.random_brightness(
+        image,
+        max_delta=0.1)
+    return image, keypoints, bboxes, mask
+
+
+def random_contrast(image, keypoints, bboxes, mask):
+    image = tf.image.random_contrast(
+        image,
+        lower=0.9,
+        upper=1.1)
+    return image, keypoints, bboxes, mask
+
+
 def resize(image, keypoints, bbox, mask,
            target_image_size=(224, 224),
            target_mask_size=None):
