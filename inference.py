@@ -5,11 +5,8 @@ import os
 import time
 import argparse
 from glob import glob
-import urllib.request
-import requests
-from requests.auth import HTTPBasicAuth
+import matplotlib.cm as cm
 from utils.ops import non_max_suppression
-from utils.bboxes import generate_anchors, bbox_decode
 from utils.parse_config import parse_config
 
 
@@ -20,6 +17,12 @@ class Inference(object):
         self.train_cfg = cfg['train_config']
         self.model_cfg = cfg['model_config']
         self.infer_cfg = cfg['infer_config']
+        self.num_keypoints = len(self.train_cfg.train_keypoints)
+        self.num_joints = len(self.train_cfg.train_skeletons)
+        kp_dict = {kp: i for i, kp in
+                   enumerate(self.train_cfg.train_keypoints)}
+        self.pairs = [[kp_dict[kp1], kp_dict[kp2]] for kp1, kp2
+                      in self.train_cfg.train_skeletons]
         self.col_channels = 3  # assume RGB channels only
         self.patch_h, self.patch_w = self.infer_cfg.network_input_shape
         self.out_stride = self.infer_cfg.out_stride
@@ -29,7 +32,6 @@ class Inference(object):
         self.strides_rows, self.strides_cols = self.infer_cfg.strides
         self.n_rows = int(np.ceil(self.img_h / self.patch_h))
         self.n_cols = int(np.ceil(self.img_w / self.patch_w))
-        self.anchors = self.generate_anchors()
         with tf.device('/cpu:0'):
             self.preprocess_tensors = self.preprocess_graph()
         with tf.device('/gpu:0'):
@@ -129,91 +131,9 @@ class Inference(object):
         out = stitched_rows[0]
         for i in range(1, self.n_rows):
             out = self.stitch_to_bottom(out, stitched_rows[i])
-        out = tf.expand_dims(out, axis=0)
-        out = non_max_suppression(out, window_size=3)
+
         out = tf.squeeze(out)
         return out
-
-    def generate_anchors(self):
-        all_anchors = []
-        for i, (base_anchor_size, stride) in enumerate(zip(
-                self.model_cfg.base_anchor_sizes,
-                self.model_cfg.anchor_strides)):
-            grid_shape = tf.constant(
-                self.model_cfg.input_shape, tf.int32) / stride
-            anchors = generate_anchors(
-                grid_shape=grid_shape,
-                base_anchor_size=base_anchor_size,
-                stride=stride,
-                scales=self.model_cfg.anchor_scales,
-                aspect_ratios=self.model_cfg.anchor_ratios)
-            all_anchors.append(anchors)
-        return tf.concat(all_anchors, axis=0)
-
-    def get_bboxes(self, bbox_probs, bbox_regs):
-        # TODO : come up with a strategy to stitch patches for bboxes
-        patches_top = np.repeat(
-            self.strides_rows * np.arange(self.n_rows), self.n_cols)
-        patches_left = np.tile(
-            self.strides_cols * np.arange(self.n_cols), self.n_rows)
-        n_patches = self.n_rows * self.n_cols
-        _, bbox_probs = tf.split(
-            bbox_probs,
-            num_or_size_splits=2,
-            axis=1)
-        bbox_probs = tf.split(
-            tf.squeeze(bbox_probs),
-            num_or_size_splits=n_patches,
-            axis=0)
-        bbox_regs = tf.split(
-            bbox_regs,
-            num_or_size_splits=n_patches,
-            axis=0)
-        bboxes, scores = [], []
-
-        for i in range(n_patches):
-            indices = tf.squeeze(tf.where(
-                tf.greater(bbox_probs[i], 0.5)))
-
-            def _get_bboxes():
-                boxes = tf.gather(bbox_regs[i], indices)
-                anchors = tf.gather(self.anchors, indices)
-                boxes = bbox_decode(
-                    boxes, anchors, self.model_cfg.scale_factors)
-                scores_ = tf.gather(bbox_probs[i], indices)
-                scores_ = tf.expand_dims(scores_, axis=1)
-                boxes *= tf.constant(
-                    [self.patch_h,
-                     self.patch_w,
-                     self.patch_h,
-                     self.patch_w],
-                    dtype=tf.float32)
-                delta = tf.constant(
-                    [patches_top[i],
-                     patches_left[i],
-                     patches_top[i],
-                     patches_left[i]],
-                    dtype=tf.float32)
-                boxes += delta
-                return tf.concat([boxes, scores_], axis=1)
-
-            def _default_bboxes():
-                return tf.constant([[-1, -1, -1, -1, 0]],
-                                   tf.float32)
-
-            bboxes_scores = tf.cond(
-                tf.greater(tf.rank(indices), 0),
-                true_fn=_get_bboxes,
-                false_fn=_default_bboxes)
-            bboxes.append(bboxes_scores[:, :4])
-            scores.append(bboxes_scores[:, -1])
-        bboxes = tf.concat(bboxes, axis=0)
-        scores = tf.concat(scores, axis=0)
-        selected_indices = tf.image.non_max_suppression(
-            bboxes, scores,
-            max_output_size=10,
-            iou_threshold=0.7)
-        return tf.gather(bboxes, selected_indices)
 
     def preprocess_graph(self):
         """Creates graph for preprocessing"""
@@ -235,13 +155,11 @@ class Inference(object):
         patches = g.get_tensor_by_name('import/images:0')
         heatmaps = g.get_tensor_by_name('import/heatmaps:0')
         vecmaps = g.get_tensor_by_name('import/vecmaps:0')
-        bbox_classes = g.get_tensor_by_name('import/bbox_classes:0')
-        bbox_regs = g.get_tensor_by_name('import/bbox_regs:0')
+        offsetmaps = g.get_tensor_by_name('import/offsetmaps:0')
         return {'patches': patches,
                 'heatmaps': heatmaps,
-                'vecmaps': vecmaps,
-                'bbox_classes': bbox_classes,
-                'bbox_regs': bbox_regs}
+                'vecmaps': vecmaps * self.train_cfg.vector_scale,
+                'offsetmaps': offsetmaps * self.train_cfg.offset_scale}
 
     def postprocess_graph(self):
         """Creates graph for post processing"""
@@ -250,16 +168,32 @@ class Inference(object):
             shape=[self.n_rows * self.n_cols,
                    self.patch_h / self.out_stride,
                    self.patch_w / self.out_stride,
-                   self.col_channels])
-        bbox_probs = tf.placeholder(tf.float32, shape=[None, 2])
-        bbox_regs = tf.placeholder(tf.float32, shape=[None, 4])
-        keypoints = self.stitch_patches(heatmaps)
-        bboxes = self.get_bboxes(bbox_probs, bbox_regs)
+                   self.num_keypoints])
+        vecmaps = tf.placeholder(
+            tf.float32,
+            shape=[self.n_rows * self.n_cols,
+                   self.patch_h / self.out_stride,
+                   self.patch_w / self.out_stride,
+                   4 * self.num_joints])
+        offsetmaps = tf.placeholder(
+            tf.float32,
+            shape=[self.n_rows * self.n_cols,
+                   self.patch_h / self.out_stride,
+                   self.patch_w / self.out_stride,
+                   2 * self.num_keypoints])
+        stitched_heatmaps = self.stitch_patches(heatmaps)
+        heatmaps_nms = tf.expand_dims(stitched_heatmaps, axis=0)
+        heatmaps_nms = non_max_suppression(
+            heatmaps_nms, window_size=self.train_cfg.window_size)
+        heatmaps_nms = tf.squeeze(heatmaps_nms)
+        stitched_vecmaps = self.stitch_patches(vecmaps)
+        stitched_offsetmaps = self.stitch_patches(offsetmaps)
         return {'heatmaps': heatmaps,
-                'bbox_probs': bbox_probs,
-                'bbox_regs': bbox_regs,
-                'keypoints': keypoints,
-                'bboxes': bboxes}
+                'vecmaps': vecmaps,
+                'offsetmaps': offsetmaps,
+                'stitched_heatmaps': heatmaps_nms,
+                'stitched_vecmaps': stitched_vecmaps,
+                'stitched_offsetmaps': stitched_offsetmaps}
 
     def _run_inference(self, sess, image):
         t0 = time.time()
@@ -268,45 +202,77 @@ class Inference(object):
             feed_dict={self.preprocess_tensors['image']: image})
         t1 = time.time()
 
-        heatmaps, vecmaps, bbox_probs, bbox_regs = sess.run(
+        heatmaps, vecmaps, offsetmaps = sess.run(
             [self.network_tensors['heatmaps'],
              self.network_tensors['vecmaps'],
-             self.network_tensors['bbox_classes'],
-             self.network_tensors['bbox_regs']],
+             self.network_tensors['offsetmaps']],
             feed_dict={self.network_tensors['patches']: patches})
         t2 = time.time()
 
         feed_dict = {
-            self.postprocess_tensors['bbox_probs']: bbox_probs,
-            self.postprocess_tensors['bbox_regs']: bbox_regs
+            self.postprocess_tensors['heatmaps']: heatmaps,
+            self.postprocess_tensors['vecmaps']: vecmaps,
+            self.postprocess_tensors['offsetmaps']: offsetmaps
         }
-        bboxes = sess.run(
-            self.postprocess_tensors['bboxes'], feed_dict=feed_dict)
-
-        out = sess.run(
-            self.postprocess_tensors['keypoints'],
-            feed_dict={self.postprocess_tensors['heatmaps']: heatmaps})
-        # some additional post-processing
-        threshold = 0.5
-        out[out > threshold] = 1.
-        out[out < threshold] = 0.
-        out = (255. * out).astype(np.uint8)
+        stitched_maps = sess.run(
+            [self.postprocess_tensors['stitched_heatmaps'],
+             self.postprocess_tensors['stitched_vecmaps'],
+             self.postprocess_tensors['stitched_offsetmaps']],
+             feed_dict=feed_dict)
         t3 = time.time()
-        return out, bboxes, [t0, t1, t2, t3]
+        return stitched_maps, [t0, t1, t2, t3]
 
-    def display_output(self, image, out, bboxes):
-        out = cv2.resize(out, (self.img_w, self.img_h))
-        if self.infer_cfg.display_bbox:
-            for box in bboxes:
-                if len(box) == 0:
-                    continue
-                ymin, xmin, ymax, xmax = box
-                out = cv2.rectangle(
-                    out, (xmin, ymin), (xmax, ymax), (0, 0, 255), 1)
-        # back to BGR for opencv display
-        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-        out = cv2.addWeighted(image, 0.4, out, 0.6, 0)
-        cv2.imshow('out', out)
+    def display_output(self, image, heatmaps, vecmaps, offsetmaps,
+                       pairs=([0, 1], [2, 1]), threshold=0.2):
+        heatmaps[heatmaps > threshold] = 1.
+        heatmaps[heatmaps <= threshold] = 0.
+        img_h, img_w, _ = image.shape
+        h, w, num_keypoints = heatmaps.shape
+        scale_h, scale_w = img_h / h, img_w / w
+        out_img = np.zeros((h, w, 3))
+        colors = cm.jet(np.linspace(0, 1, num_keypoints))
+        for i in range(num_keypoints):
+            col = colors[i][:3]
+            heatmap = heatmaps[:, :, i]
+            heatmap = np.tile(np.expand_dims(heatmap, axis=2),
+                              (1, 1, 3))
+            out_img += heatmap * col.reshape((1, 1, 3))
+        out_img = cv2.resize(out_img, (img_w, img_h),
+                             interpolation=cv2.INTER_NEAREST)
+        out_img = (255. * out_img).astype(np.uint8)
+        out_img = cv2.addWeighted(out_img, .7, image, 0.3, 0)
+        for i, (kp1, kp2) in enumerate(pairs):
+            y_indices_1, x_indices_1 = heatmaps[:, :, kp1].nonzero()
+            for x, y in zip(x_indices_1, y_indices_1):
+                x0 = int(scale_w * (x + .5))
+                y0 = int(scale_h * (y + .5))
+                delta_x = int(scale_w * (
+                        vecmaps[y, x, 4 * i] + offsetmaps[y, x, kp2]))
+                delta_y = int(scale_h * (
+                        vecmaps[y, x, 4 * i + 1]
+                        + offsetmaps[y, x, num_keypoints + kp2]))
+                col = (255. * colors[kp1][:3]).astype(np.uint8)
+                col = tuple(map(int, col))
+                out_img = cv2.line(out_img, (x0, y0),
+                                   (x0 + delta_x, y0 + delta_y),
+                                   col, 1)
+            y_indices_2, x_indices_2 = heatmaps[:, :, kp2].nonzero()
+            for x, y in zip(x_indices_2, y_indices_2):
+                x0 = int(scale_w * (x + .5))
+                y0 = int(scale_h * (y + .5))
+                delta_x = int(scale_w * (
+                        vecmaps[y, x, 4 * i + 2] + offsetmaps[y, x, kp1]))
+                delta_y = int(scale_h * (
+                        vecmaps[y, x, 4 * i + 3]
+                        + offsetmaps[y, x, num_keypoints + kp1]))
+                col = (255. * colors[kp2][:3]).astype(np.uint8)
+                col = tuple(map(int, col))
+                out_img = cv2.line(out_img, (x0, y0),
+                                   (x0 + delta_x, y0 + delta_y),
+                                   col, 1)
+        scale_ = 768. / min(img_h, img_w)
+        out_img = cv2.resize(out_img, None, fx=scale_, fy=scale_)
+        cv2.imshow('out', out_img)
         if cv2.waitKey(1) == 27:  # Esc key to stop
             return 0
         elif cv2.waitKey(1) & 0xFF == ord('q'):
@@ -324,9 +290,13 @@ class Inference(object):
             for img_file in img_files:
                 image = cv2.imread(img_file)
                 image = self.preprocess_image(image)
-                out, bboxes, t = self._run_inference(sess, image)
+                stitched_maps, t = self._run_inference(sess, image)
                 stats.update(t)
-                if not self.display_output(image, out, bboxes):
+                heatmaps, vecmaps, offsetmaps = stitched_maps
+                out = self.display_output(
+                    image, heatmaps, vecmaps, offsetmaps,
+                    pairs=self.pairs, threshold=0.2)
+                if not out:
                     break
         elif input_type == 'video':
             video_file = self.infer_cfg.video
@@ -336,9 +306,13 @@ class Inference(object):
                 if not ret:
                     break
                 image = self.preprocess_image(image)
-                out, bboxes, t = self._run_inference(sess, image)
+                stitched_maps, t = self._run_inference(sess, image)
                 stats.update(t)
-                if not self.display_output(image, out, bboxes):
+                heatmaps, vecmaps, offsetmaps = stitched_maps
+                out = self.display_output(
+                    image, heatmaps, vecmaps, offsetmaps,
+                    pairs=self.pairs, threshold=0.2)
+                if not out:
                     break
             cap.release()
         elif input_type == 'camera':
@@ -349,9 +323,13 @@ class Inference(object):
                 if not ret:
                     break
                 image = self.preprocess_image(image)
-                out, bboxes, t = self._run_inference(sess, image)
+                stitched_maps, t = self._run_inference(sess, image)
                 stats.update(t)
-                if not self.display_output(image, out, bboxes):
+                heatmaps, vecmaps, offsetmaps = stitched_maps
+                out = self.display_output(
+                    image, heatmaps, vecmaps, offsetmaps,
+                    pairs=self.pairs, threshold=0.15)
+                if not out:
                     break
             cap.release()
         else:
