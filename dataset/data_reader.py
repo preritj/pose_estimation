@@ -230,7 +230,8 @@ class PoseDataReader(object):
         random_crop_fn = functools.partial(
             random_crop,
             crop_size=img_size,
-            scale_range=aug_cfg['scale_range']
+            scale_range=aug_cfg['scale_range'],
+            require_person_in_crop=aug_cfg['require_person_in_crop']
         )
         if aug_cfg['random_crop']:
             dataset = dataset.map(
