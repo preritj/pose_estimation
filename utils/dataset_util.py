@@ -103,7 +103,7 @@ def prune_bboxes_keypoints(bboxes, keypoints, crop_box):
 
 def random_crop(image, keypoints, bboxes, mask,
                 crop_size=(224, 224), scale_range=(1.5, 4.),
-                require_person_in_crop=True):
+                background_prob=0.5):
     bboxes = tf.clip_by_value(
         bboxes, clip_value_min=0.0, clip_value_max=1.0)
     n_bboxes = tf.shape(bboxes)[0]
@@ -154,7 +154,7 @@ def random_crop(image, keypoints, bboxes, mask,
     crop_w = tf.to_int32(aspect_ratio * tf.to_float(crop_h))
     crop_shape = tf.stack([crop_h, crop_w])
 
-    if require_person_in_crop:
+    def _require_person_in_crop():
         bbox_min, bbox_max = random_bbox[:2], random_bbox[2:]
         bbox_min = tf.cast(tf.round(bbox_min * img_shape[:2]), tf.int32)
         bbox_max = tf.cast(tf.round(bbox_max * img_shape[:2]), tf.int32)
@@ -167,9 +167,18 @@ def random_crop(image, keypoints, bboxes, mask,
         offset_min = tf.where(tf.less_equal(offset_max, offset_min),
                               tf.constant([0, 0]),
                               offset_min)
-    else:
+        return offset_min, offset_max
+
+    def _dont_require_person_in_crop():
         offset_min = tf.constant([0, 0])
         offset_max = img_shape_int - crop_shape
+        return offset_min, offset_max
+
+    offset_min, offset_max = tf.cond(
+        tf.less(tf.random_uniform(shape=[]), background_prob),
+        true_fn=_dont_require_person_in_crop,
+        false_fn=_require_person_in_crop
+    )
 
     offset_h = random_int(maxval=offset_max[0], minval=offset_min[0])
     offset_w = random_int(maxval=offset_max[1], minval=offset_min[1])
