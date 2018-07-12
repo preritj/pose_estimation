@@ -102,11 +102,13 @@ def prune_bboxes_keypoints(bboxes, keypoints, crop_box):
 
 
 def random_crop(image, keypoints, bboxes, mask,
-                crop_size=(224, 224), scale_range=(1.5, 4.)):
+                crop_size=(224, 224), scale_range=(1.5, 4.),
+                require_person_in_crop=True):
     bboxes = tf.clip_by_value(
         bboxes, clip_value_min=0.0, clip_value_max=1.0)
     n_bboxes = tf.shape(bboxes)[0]
-    img_shape = tf.cast(tf.shape(image), tf.float32)
+    img_shape_int = tf.shape(image)[:2]
+    img_shape = tf.cast(img_shape_int, tf.float32)
     img_h, img_w = img_shape[0], img_shape[1]
     random_bbox = tf.cond(
         tf.greater(n_bboxes, 0),
@@ -152,18 +154,22 @@ def random_crop(image, keypoints, bboxes, mask,
     crop_w = tf.to_int32(aspect_ratio * tf.to_float(crop_h))
     crop_shape = tf.stack([crop_h, crop_w])
 
-    bbox_min, bbox_max = random_bbox[:2], random_bbox[2:]
-    bbox_min = tf.cast(tf.round(bbox_min * img_shape[:2]), tf.int32)
-    bbox_max = tf.cast(tf.round(bbox_max * img_shape[:2]), tf.int32)
-    bbox_min = tf.maximum(bbox_min, 0)
+    if require_person_in_crop:
+        bbox_min, bbox_max = random_bbox[:2], random_bbox[2:]
+        bbox_min = tf.cast(tf.round(bbox_min * img_shape[:2]), tf.int32)
+        bbox_max = tf.cast(tf.round(bbox_max * img_shape[:2]), tf.int32)
+        bbox_min = tf.maximum(bbox_min, 0)
 
-    offset_min = tf.maximum(0, bbox_max - crop_shape)
-    offset_max = tf.minimum(
-        tf.cast(img_shape[:2], tf.int32) - crop_shape + 1,
-        bbox_min + 1)
-    offset_min = tf.where(tf.less_equal(offset_max, offset_min),
-                          tf.constant([0, 0]),
-                          offset_min)
+        offset_min = tf.maximum(0, bbox_max - crop_shape)
+        offset_max = tf.minimum(
+            tf.cast(img_shape[:2], tf.int32) - crop_shape + 1,
+            bbox_min + 1)
+        offset_min = tf.where(tf.less_equal(offset_max, offset_min),
+                              tf.constant([0, 0]),
+                              offset_min)
+    else:
+        offset_min = tf.constant([0, 0])
+        offset_max = img_shape_int - crop_shape
 
     offset_h = random_int(maxval=offset_max[0], minval=offset_min[0])
     offset_w = random_int(maxval=offset_max[1], minval=offset_min[1])

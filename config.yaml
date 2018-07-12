@@ -136,6 +136,7 @@ augmentation:
   random_brightness: true
   random_contrast: true
   scale_range: [2.25, 2.85]
+  require_person_in_crop: false
 
 preprocess:
   image_resize: [320, 320]
