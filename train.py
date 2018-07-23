@@ -85,6 +85,9 @@ class Trainer(object):
         dataset = dataset.map(
             map_fn, num_parallel_calls=train_cfg.num_parallel_map_calls)
         dataset = dataset.prefetch(train_cfg.prefetch_size)
+        # if train_cfg.shuffle:
+        #     dataset = dataset.shuffle(train_cfg.shuffle_buffer_size)
+        dataset = dataset.repeat(train_cfg.num_epochs or None)
         dataset = dataset.batch(train_cfg.batch_size)
         dataset = dataset.prefetch(train_cfg.prefetch_size)
         return dataset

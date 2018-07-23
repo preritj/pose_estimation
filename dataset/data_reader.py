@@ -9,7 +9,7 @@ import tensorflow as tf
 import functools
 from utils.dataset_util import (
     normalize_bboxes, normalize_keypoints, random_crop,
-    random_brightness, random_contrast,
+    random_brightness, random_contrast, random_hue,
     random_flip_left_right, keypoints_select, resize)
 
 
@@ -251,6 +251,12 @@ class PoseDataReader(object):
                 num_parallel_calls=train_cfg.num_parallel_map_calls
             )
             dataset = dataset.prefetch(train_cfg.prefetch_size)
+        if aug_cfg['random_hue']:
+            dataset = dataset.map(
+                random_hue,
+                num_parallel_calls=train_cfg.num_parallel_map_calls
+            )
+            dataset = dataset.prefetch(train_cfg.prefetch_size)
         return dataset
 
     def preprocess_data(self, dataset, train_cfg):
@@ -281,8 +287,6 @@ class PoseDataReader(object):
         if train_config.shuffle:
             dataset = dataset.shuffle(
                 train_config.filenames_shuffle_buffer_size)
-
-        dataset = dataset.repeat(train_config.num_epochs or None)
 
         file_read_func = functools.partial(tf.data.TFRecordDataset,
                                            buffer_size=8 * 1000 * 1000)
