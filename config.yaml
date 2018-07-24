@@ -216,7 +216,7 @@ out_stride: 8
 # Example:
 #   [320, 569] for lab videos
 #   [456, 800] for Walmart videos
-resize_shape: [600, 800]
+resize_shape: [540, 720]
 
 # overlapping patches are encouraged
 # for more robust prediction near edge of patches
@@ -226,7 +226,7 @@ resize_shape: [600, 800]
 # Example:
 #   [1, 249] for lab videos
 #   [136, 240] for Walmart videos
-strides: [280, 240]
+strides: [220, 200]
 
 # input_type can be images, video or camera
 input_type: camera

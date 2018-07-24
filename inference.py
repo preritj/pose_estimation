@@ -83,7 +83,7 @@ class Inference(object):
                             dtype=tf.float32)
         return patches
 
-    def stitch_to_right(self, patch_left, patch_right):
+    def stitch_to_right(self, patch_left, patch_right, vector=False):
         """Creates heatmap by stitching patch_right on to patch_left
         Overlap region heatmap is the weighted sum of two patches"""
         overlap_cols = int(
@@ -92,15 +92,47 @@ class Inference(object):
             patch_left, [-1, overlap_cols], axis=1)
         right_overlap, right = tf.split(
             patch_right, [overlap_cols, -1], axis=1)
-        weights = tf.reshape(
-            tf.range(overlap_cols, dtype=tf.float32),
-            shape=(1, overlap_cols, 1))
-        overlap = (left_overlap * (overlap_cols - 1. - weights)
-                   + right_overlap * weights) / overlap_cols
+
+        if vector:
+            weights = tf.reshape(
+                tf.range(overlap_cols, dtype=tf.float32),
+                shape=(1, overlap_cols))
+            overlap_vecmaps = []
+            for i in range(2 * self.num_joints):
+                left_vec_x = left_overlap[:, :, 2 * i]
+                left_vec_y = left_overlap[:, :, 2 * i + 1]
+                w_left = tf.clip_by_value(
+                    overlap_cols - 1. - weights - left_vec_x,
+                    clip_value_min=0,
+                    clip_value_max=overlap_cols)
+                w_left = tf.minimum(
+                    w_left + 0.0001, overlap_cols - 1. - weights)
+                right_vec_x = right_overlap[:, :, 2 * i]
+                right_vec_y = right_overlap[:, :, 2 * i + 1]
+                w_right = tf.clip_by_value(
+                    weights + right_vec_x,
+                    clip_value_min=0,
+                    clip_value_max=overlap_cols)
+                w_right = tf.minimum(w_right + 0.0001, weights)
+                w_tot = w_left + w_right
+                w_left = w_left / tf.maximum(w_tot, .0001)
+                w_right = w_right / tf.maximum(w_tot, .0001)
+                overlap_vec_x = (left_vec_x * w_left
+                                 + right_vec_x * w_right)
+                overlap_vec_y = (left_vec_y * w_left
+                                 + right_vec_y * w_right)
+                overlap_vecmaps += [overlap_vec_x, overlap_vec_y]
+            overlap = tf.stack(overlap_vecmaps, axis=2)
+        else:
+            weights = tf.reshape(
+                tf.range(overlap_cols, dtype=tf.float32),
+                shape=(1, overlap_cols, 1))
+            overlap = (left_overlap * (overlap_cols - 1. - weights)
+                       + right_overlap * weights) / (overlap_cols - 1)
         out = tf.concat([left, overlap, right], axis=1)
         return out
 
-    def stitch_to_bottom(self, patch_top, patch_bottom):
+    def stitch_to_bottom(self, patch_top, patch_bottom, vector=False):
         """Creates heatmap by stitching patch_bottom on to patch_top
         Overlap region heatmap is the weighted sum of two patches"""
         overlap_rows = int(
@@ -109,15 +141,47 @@ class Inference(object):
             patch_top, [-1, overlap_rows], axis=0)
         bottom_overlap, bottom = tf.split(
             patch_bottom, [overlap_rows, -1], axis=0)
-        weights = tf.reshape(
-            tf.range(overlap_rows, dtype=tf.float32),
-            shape=(overlap_rows, 1, 1))
-        overlap = (top_overlap * (overlap_rows - 1. - weights)
-                   + bottom_overlap * weights) / overlap_rows
+
+        if vector:
+            weights = tf.reshape(
+                tf.range(overlap_rows, dtype=tf.float32),
+                shape=(overlap_rows, 1))
+            overlap_vecmaps = []
+            for i in range(2 * self.num_joints):
+                top_vec_x = top_overlap[:, :, 2 * i]
+                top_vec_y = top_overlap[:, :, 2 * i + 1]
+                w_top = tf.clip_by_value(
+                    overlap_rows - 1. - weights - top_vec_y,
+                    clip_value_min=0,
+                    clip_value_max=overlap_rows - 1)
+                w_top = tf.minimum(
+                    w_top + 0.0001, overlap_rows - 1. - weights)
+                bottom_vec_x = bottom_overlap[:, :, 2 * i]
+                bottom_vec_y = bottom_overlap[:, :, 2 * i + 1]
+                w_bottom = tf.clip_by_value(
+                    weights + bottom_vec_y,
+                    clip_value_min=0,
+                    clip_value_max=overlap_rows - 1)
+                w_bottom = tf.minimum(w_bottom + 0.0001, weights)
+                w_tot = w_top + w_bottom
+                w_top = w_top / tf.maximum(w_tot, .0001)
+                w_bottom = w_bottom / tf.maximum(w_tot, .0001)
+                overlap_vec_x = (top_vec_x * w_top
+                                 + bottom_vec_x * w_bottom)
+                overlap_vec_y = (top_vec_y * w_top
+                                 + bottom_vec_y * w_bottom)
+                overlap_vecmaps += [overlap_vec_x, overlap_vec_y]
+            overlap = tf.stack(overlap_vecmaps, axis=2)
+        else:
+            weights = tf.reshape(
+                tf.range(overlap_rows, dtype=tf.float32),
+                shape=(overlap_rows, 1, 1))
+            overlap = (top_overlap * (overlap_rows - 1. - weights)
+                       + bottom_overlap * weights) / (overlap_rows - 1)
         out = tf.concat([top, overlap, bottom], axis=0)
         return out
 
-    def stitch_patches(self, patches):
+    def stitch_patches(self, patches, vector=False):
         rows = tf.split(
             patches, num_or_size_splits=self.n_rows, axis=0)
         stitched_rows = []
@@ -125,12 +189,14 @@ class Inference(object):
             stitched_row = patches[i * self.n_cols]
             for j in range(1, self.n_cols):
                 stitched_row = self.stitch_to_right(
-                    stitched_row, patches[i * self.n_cols + j])
+                    stitched_row, patches[i * self.n_cols + j],
+                    vector=vector)
             stitched_rows.append(stitched_row)
 
         out = stitched_rows[0]
         for i in range(1, self.n_rows):
-            out = self.stitch_to_bottom(out, stitched_rows[i])
+            out = self.stitch_to_bottom(
+                out, stitched_rows[i], vector=vector)
 
         out = tf.squeeze(out)
         return out
@@ -186,7 +252,7 @@ class Inference(object):
         heatmaps_nms = non_max_suppression(
             heatmaps_nms, window_size=self.train_cfg.window_size)
         heatmaps_nms = tf.squeeze(heatmaps_nms)
-        stitched_vecmaps = self.stitch_patches(vecmaps)
+        stitched_vecmaps = self.stitch_patches(vecmaps, vector=True)
         stitched_offsetmaps = self.stitch_patches(offsetmaps)
         return {'heatmaps': heatmaps,
                 'vecmaps': vecmaps,
