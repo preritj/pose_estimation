@@ -216,7 +216,12 @@ out_stride: 8
 # Example:
 #   [320, 569] for lab videos
 #   [456, 800] for Walmart videos
+<<<<<<< HEAD
 resize_shape: [540, 720]
+=======
+# resize_shape: [320, 426]
+resize_shape: [456, 800]
+>>>>>>> 0c5b4a3556a0a08ea3dab1666def5b1243bd5086
 
 # overlapping patches are encouraged
 # for more robust prediction near edge of patches
@@ -226,13 +231,21 @@ resize_shape: [540, 720]
 # Example:
 #   [1, 249] for lab videos
 #   [136, 240] for Walmart videos
+<<<<<<< HEAD
 strides: [220, 200]
+=======
+#strides: [1, 106]
+strides: [136, 240]
+
+flip_top_down: true
+>>>>>>> 0c5b4a3556a0a08ea3dab1666def5b1243bd5086
 
 # input_type can be images, video or camera
-input_type: camera
+input_type: images
 # images can be a list or use *
+images: /media/storage/AVAretail/MasterCard/*.jpg
 # images: /media/easystore/TrainData/Walmart/Round1/Recording_2/20180308_*.jpg
-images: /media/easystore/TrainData/Lab/April20/Recording_44/20180420_*.jpg
+#images: /media/easystore/TrainData/Lab/April20/Recording_44/20180420_*.jpg
 
 video: /media/easystore/TrainData/Lab/April20/Recording_44/20180420_0000000.avi
 

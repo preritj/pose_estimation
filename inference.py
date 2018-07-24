@@ -44,6 +44,8 @@ class Inference(object):
         image = image[:, :, ::-1]
         # cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = cv2.resize(image, (self.img_w, self.img_h))
+        if self.infer_cfg.flip_top_down:
+            image = cv2.flip(image, 0)
         return image
 
     def create_patches(self, image):
@@ -306,7 +308,11 @@ class Inference(object):
         out_img = cv2.resize(out_img, (img_w, img_h),
                              interpolation=cv2.INTER_NEAREST)
         out_img = (255. * out_img).astype(np.uint8)
+<<<<<<< HEAD
         out_img = cv2.addWeighted(out_img, .5, image, 0.5, 0)
+=======
+        out_img = cv2.addWeighted(out_img, 0.5, image[:, :, ::-1], 0.5, 0)
+>>>>>>> 0c5b4a3556a0a08ea3dab1666def5b1243bd5086
         for i, (kp1, kp2) in enumerate(pairs):
             y_indices_1, x_indices_1 = heatmaps[:, :, kp1].nonzero()
             for x, y in zip(x_indices_1, y_indices_1):
@@ -353,6 +359,7 @@ class Inference(object):
             img_files = self.infer_cfg.images
             if not isinstance(img_files, list):
                 img_files = glob(img_files)
+                img_files.sort()
             for img_file in img_files:
                 image = cv2.imread(img_file)
                 image = self.preprocess_image(image)
@@ -361,7 +368,7 @@ class Inference(object):
                 heatmaps, vecmaps, offsetmaps = stitched_maps
                 out = self.display_output(
                     image, heatmaps, vecmaps, offsetmaps,
-                    pairs=self.pairs, threshold=0.2)
+                    pairs=self.pairs, threshold=0.3)
                 if not out:
                     break
         elif input_type == 'video':
@@ -377,7 +384,7 @@ class Inference(object):
                 heatmaps, vecmaps, offsetmaps = stitched_maps
                 out = self.display_output(
                     image, heatmaps, vecmaps, offsetmaps,
-                    pairs=self.pairs, threshold=0.2)
+                    pairs=self.pairs, threshold=0.15)
                 if not out:
                     break
             cap.release()
