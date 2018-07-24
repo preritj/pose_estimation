@@ -308,11 +308,8 @@ class Inference(object):
         out_img = cv2.resize(out_img, (img_w, img_h),
                              interpolation=cv2.INTER_NEAREST)
         out_img = (255. * out_img).astype(np.uint8)
-<<<<<<< HEAD
         out_img = cv2.addWeighted(out_img, .5, image, 0.5, 0)
-=======
         out_img = cv2.addWeighted(out_img, 0.5, image[:, :, ::-1], 0.5, 0)
->>>>>>> 0c5b4a3556a0a08ea3dab1666def5b1243bd5086
         for i, (kp1, kp2) in enumerate(pairs):
             y_indices_1, x_indices_1 = heatmaps[:, :, kp1].nonzero()
             for x, y in zip(x_indices_1, y_indices_1):
