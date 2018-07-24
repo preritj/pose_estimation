@@ -240,7 +240,7 @@ class Inference(object):
         out_img = cv2.resize(out_img, (img_w, img_h),
                              interpolation=cv2.INTER_NEAREST)
         out_img = (255. * out_img).astype(np.uint8)
-        out_img = cv2.addWeighted(out_img, .7, image, 0.3, 0)
+        out_img = cv2.addWeighted(out_img, .5, image, 0.5, 0)
         for i, (kp1, kp2) in enumerate(pairs):
             y_indices_1, x_indices_1 = heatmaps[:, :, kp1].nonzero()
             for x, y in zip(x_indices_1, y_indices_1):
@@ -272,7 +272,7 @@ class Inference(object):
                                    col, 1)
         scale_ = 768. / min(img_h, img_w)
         out_img = cv2.resize(out_img, None, fx=scale_, fy=scale_)
-        cv2.imshow('out', out_img)
+        cv2.imshow('out', out_img[:, :, ::-1])
         if cv2.waitKey(1) == 27:  # Esc key to stop
             return 0
         elif cv2.waitKey(1) & 0xFF == ord('q'):
