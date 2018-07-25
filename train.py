@@ -366,7 +366,7 @@ class Trainer(object):
             NotImplementedError("{} not implemented".format(model_name))
 
         h, w = self.infer_cfg.network_input_shape
-        inputs = {'images': tf.placeholder(tf.float32, [None, h, w, 3],
+        inputs = {'images': tf.placeholder(tf.float32, [None, None, None, 3],
                                            name='images')}
         predictions = model.predict(inputs, is_training=False)
         if self.train_cfg.quantize:

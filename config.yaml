@@ -197,7 +197,8 @@ final_depth: 160
 --- !infer
 model_dir: models/latest
 frozen_model: frozen_model.pb
-network_input_shape: [320, 320]
+# network_input_shape: [432, 768]
+network_input_shape: [576, 768]
 
 # out_stride determines the output shape of network
 # For example, if input image is 320 x 320
@@ -216,9 +217,11 @@ out_stride: 8
 # Example:
 #   [320, 569] for lab videos
 #   [456, 800] for Walmart videos
-resize_shape: [540, 720]
+# resize_shape: [540, 720]
 # resize_shape: [320, 426]
-resize_shape: [456, 800]
+# resize_shape: [456, 800]
+# resize_shape: [432, 768]
+resize_shape: [576, 768]
 
 # overlapping patches are encouraged
 # for more robust prediction near edge of patches
@@ -228,14 +231,15 @@ resize_shape: [456, 800]
 # Example:
 #   [1, 249] for lab videos
 #   [136, 240] for Walmart videos
-strides: [220, 200]
+#strides: [220, 200]
 #strides: [1, 106]
-strides: [136, 240]
+#strides: [136, 240]
+strides: [1, 1]
 
-flip_top_down: true
+flip_top_down: false
 
 # input_type can be images, video or camera
-input_type: images
+input_type: camera
 # images can be a list or use *
 images: /media/storage/AVAretail/MasterCard/*.jpg
 # images: /media/easystore/TrainData/Walmart/Round1/Recording_2/20180308_*.jpg

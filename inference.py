@@ -208,7 +208,7 @@ class Inference(object):
         image = tf.placeholder(
             tf.float32,
             shape=[self.img_h, self.img_w, self.col_channels])
-        patches = self.create_patches(image)
+        patches = tf.expand_dims(image, axis=0)  # self.create_patches(image)
         return {'image': image,
                 'patches': patches}
 
@@ -249,13 +249,14 @@ class Inference(object):
                    self.patch_h / self.out_stride,
                    self.patch_w / self.out_stride,
                    2 * self.num_keypoints])
-        stitched_heatmaps = self.stitch_patches(heatmaps)
-        heatmaps_nms = tf.expand_dims(stitched_heatmaps, axis=0)
+        # stitched_heatmaps = self.stitch_patches(heatmaps)
+        # heatmaps_nms = tf.expand_dims(stitched_heatmaps, axis=0)
+        heatmaps_nms = heatmaps
         heatmaps_nms = non_max_suppression(
             heatmaps_nms, window_size=self.train_cfg.window_size)
         heatmaps_nms = tf.squeeze(heatmaps_nms)
-        stitched_vecmaps = self.stitch_patches(vecmaps, vector=True)
-        stitched_offsetmaps = self.stitch_patches(offsetmaps)
+        stitched_vecmaps = tf.squeeze(vecmaps)  # self.stitch_patches(vecmaps, vector=True)
+        stitched_offsetmaps = tf.squeeze(offsetmaps)  # self.stitch_patches(offsetmaps)
         return {'heatmaps': heatmaps,
                 'vecmaps': vecmaps,
                 'offsetmaps': offsetmaps,
@@ -308,7 +309,7 @@ class Inference(object):
         out_img = cv2.resize(out_img, (img_w, img_h),
                              interpolation=cv2.INTER_NEAREST)
         out_img = (255. * out_img).astype(np.uint8)
-        out_img = cv2.addWeighted(out_img, .5, image, 0.5, 0)
+        # out_img = cv2.addWeighted(out_img, .5, image, 0.5, 0)
         out_img = cv2.addWeighted(out_img, 0.5, image[:, :, ::-1], 0.5, 0)
         for i, (kp1, kp2) in enumerate(pairs):
             y_indices_1, x_indices_1 = heatmaps[:, :, kp1].nonzero()
@@ -341,7 +342,8 @@ class Inference(object):
                                    col, 1)
         scale_ = 768. / min(img_h, img_w)
         out_img = cv2.resize(out_img, None, fx=scale_, fy=scale_)
-        cv2.imshow('out', out_img[:, :, ::-1])
+        # out_img = out_img[:, :, ::-1]
+        cv2.imshow('out', out_img)
         if cv2.waitKey(1) == 27:  # Esc key to stop
             return 0
         elif cv2.waitKey(1) & 0xFF == ord('q'):
