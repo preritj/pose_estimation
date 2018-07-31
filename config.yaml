@@ -129,6 +129,7 @@ train_skeletons:
 window_size: 3
 vector_scale: 12.
 offset_scale: 8.
+ignore_invisible: false
 
 augmentation:
   flip_left_right: true
@@ -156,8 +157,8 @@ read_block_length: 64
 shuffle_buffer_size: 131072
 prefetch_size: 64  # ~ 2 x batch-size
 
-vecmap_loss_weight: 0.1
-offsetmap_loss_weight: 1.
+vecmap_loss_weight: .1
+offsetmap_loss_weight: .4
 bbox_clf_weight: 5.
 bbox_reg_weight: 10.
 

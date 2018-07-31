@@ -408,13 +408,15 @@ def keypoints_to_heatmaps_and_vectors(
         grid_shape=(28, 28),
         window_size=3,
         vector_scale=20.,
-        offset_scale=20):
+        offset_scale=20,
+        ignore_invisible=True):
     num_instances, num_keypoints, _ = keypoints.shape
     n_vec = 4 * len(pairs)
     mask = cv2.resize(mask, (grid_shape[1], grid_shape[0]))
     mask = np.expand_dims(mask, 2)
     grid_shape = np.array(list(grid_shape))
     n = window_size * window_size
+    n_ext = (window_size + 2) * (window_size + 2)
     delta = int((window_size - 1) / 2)
     keypoints_vis = keypoints[:, :, 2]
     keypoints_vis = (keypoints_vis > 0).astype(np.uint8)
@@ -425,10 +427,14 @@ def keypoints_to_heatmaps_and_vectors(
     x_center_float, y_center_float = keypoints_xy.transpose((2, 0, 1))
     x_mesh, y_mesh = np.meshgrid(np.arange(-delta, 1 + delta),
                                  np.arange(-delta, 1 + delta))
+    x_mesh_ext, y_mesh_ext = np.meshgrid(
+        np.arange(-delta - 1, 2 + delta),
+        np.arange(-delta - 1, 2 + delta))
     bilinear_interp = ((1 - np.absolute(2. * x_mesh) / window_size)
                        * (1 - np.absolute(2. * y_mesh) / window_size))
     bilinear_interp = bilinear_interp.flatten()
     x_mesh, y_mesh = x_mesh.reshape((-1, 1)), y_mesh.reshape((-1, 1))
+    x_mesh_ext, y_mesh_ext = x_mesh_ext.reshape((-1, 1)), y_mesh_ext.reshape((-1, 1))
     heatmap = np.zeros((grid_shape[0], grid_shape[1], num_keypoints))
     heatmap_mask = mask * np.ones((grid_shape[0], grid_shape[1], num_keypoints))
     offsetmap = np.zeros((grid_shape[0], grid_shape[1], num_keypoints, 2))
@@ -443,13 +449,20 @@ def keypoints_to_heatmaps_and_vectors(
             (grid_shape[0], grid_shape[1], num_keypoints))
         instance_vecmap = np.zeros((grid_shape[0], grid_shape[1], n_vec))
         kp_vis = keypoints_vis[i]
-        values = kp_vis * np.expand_dims(bilinear_interp, 1)
+        if ignore_invisible:
+            values = kp_vis * np.expand_dims(bilinear_interp, 1)
+            mask_values = np.tile(kp_vis, n)
+        else:
+            values = np.ones(num_keypoints) * np.expand_dims(bilinear_interp, 1)
+            mask_values = np.tile(0.5 * (kp_vis + 1), n)
         values = values.flatten()
         # values = np.tile(kp_vis, int((n - 1) / 2)) * 0.5
         # values = np.concatenate([values, kp_vis, values])
-        mask_values = np.tile(kp_vis, n)
+
         kp_indices = np.repeat(np.expand_dims(np.arange(num_keypoints), 0),
                                n, axis=0)
+        kp_indices_ext = np.repeat(np.expand_dims(np.arange(num_keypoints), 0),
+                                   n_ext, axis=0)
         vec_indices = np.repeat(np.expand_dims(np.arange(n_vec), 0), n, axis=0)
         x_indices = (x_center_indices[i] + x_mesh)
         y_indices = (y_center_indices[i] + y_mesh)
@@ -457,7 +470,13 @@ def keypoints_to_heatmaps_and_vectors(
         valid_idx = np.where((x_idx >= 0) & (y_idx >= 0)
                              & (x_idx <= grid_shape[1] - 1)
                              & (y_idx <= grid_shape[0] - 1))[0]
-        offset_vals = np.concatenate([x_mesh, y_mesh], axis=1)
+        x_indices_ext = (x_center_indices[i] + x_mesh_ext)
+        y_indices_ext = (y_center_indices[i] + y_mesh_ext)
+        x_idx_ext, y_idx_ext = x_indices_ext.flatten(), y_indices_ext.flatten()
+        valid_idx_ext = np.where((x_idx_ext >= 0) & (y_idx_ext >= 0)
+                                 & (x_idx_ext <= grid_shape[1] - 1)
+                                 & (y_idx_ext <= grid_shape[0] - 1))[0]
+        offset_vals = np.concatenate([x_mesh_ext, y_mesh_ext], axis=1)
         offset_delta = np.tile(keypoints_xy_delta[i],
                                (offset_vals.shape[0], 1))
         offset_vals = np.repeat(offset_vals, num_keypoints, axis=0)
@@ -466,10 +485,13 @@ def keypoints_to_heatmaps_and_vectors(
         indices = (y_idx[valid_idx],
                    x_idx[valid_idx],
                    kp_indices.flatten()[valid_idx])
+        indices_ext = (y_idx_ext[valid_idx_ext],
+                       x_idx_ext[valid_idx_ext],
+                       kp_indices_ext.flatten()[valid_idx_ext])
         instance_heatmap[indices] = values[valid_idx]
         instance_mask[indices] = mask_values[valid_idx]
-        instance_offsetmap[indices] = offset_vals[valid_idx]
-        instance_offset_distmap[indices] = distances[valid_idx]
+        instance_offsetmap[indices_ext] = offset_vals[valid_idx_ext]
+        instance_offset_distmap[indices_ext] = distances[valid_idx_ext]
         heatmap = np.maximum(heatmap, instance_heatmap)
         heatmap_mask = np.minimum(heatmap_mask, instance_mask)
         overwrite = instance_offset_distmap < offset_distmap
@@ -479,7 +501,9 @@ def keypoints_to_heatmaps_and_vectors(
         for kp1, kp2 in pairs:
             select_x_indices += 2 * [x_indices[:, kp1]] + 2 * [x_indices[:, kp2]]
             select_y_indices += 2 * [y_indices[:, kp1]] + 2 * [y_indices[:, kp2]]
-            if (kp_vis[kp1] == 0) or (kp_vis[kp2] == 0):
+            if (kp_vis[kp1] == 0) and (kp_vis[kp2] == 0):
+                values += 4 * [np.zeros_like(x_indices[:, kp1])]
+            elif ignore_invisible and ((kp_vis[kp1] == 0) or (kp_vis[kp2] == 0)):
                 values += 4 * [np.zeros_like(x_indices[:, kp1])]
             else:
                 values += [

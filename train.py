@@ -54,7 +54,8 @@ class Trainer(object):
             grid_shape=model_cfg.output_shape,
             window_size=train_cfg.window_size,
             vector_scale=train_cfg.vector_scale,
-            offset_scale=train_cfg.offset_scale
+            offset_scale=train_cfg.offset_scale,
+            ignore_invisible=train_cfg.ignore_invisible
         )
 
         def heatmap_fn(image, keypoints, bboxes, mask):
@@ -421,5 +422,5 @@ if __name__ == '__main__':
     assert os.path.exists(config_file), \
         "{} not found".format(config_file)
     trainer = Trainer(config_file)
-    # trainer.train()
-    trainer.freeze_model()
+    trainer.train()
+    # trainer.freeze_model()

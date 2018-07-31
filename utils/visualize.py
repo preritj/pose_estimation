@@ -33,23 +33,36 @@ def visualize_heatmaps(image, heatmaps, vecmaps, offsetmaps,
     for i in range(num_keypoints):
         col = colors[i][:3]
         heatmap = heatmaps[:, :, i]
-        heatmap = np.tile(np.expand_dims(heatmap, axis=2),
+        new_heatmap = np.zeros_like(heatmap)
+        y_indices, x_indices = heatmap.nonzero()
+        for x, y in zip(x_indices, y_indices):
+            x1 = np.clip(np.around(x + offsetmaps[y, x, i]), 0, w - 1).astype(np.uint8)
+            y1 = np.clip(np.around(y + offsetmaps[y, x, num_keypoints + i]), 0, h - 1).astype(np.uint8)
+            new_heatmap[y1, x1] = 1.
+        heatmaps[:, :, i] = new_heatmap
+        heatmap = np.tile(np.expand_dims(new_heatmap, axis=2),
                           (1, 1, 3))
         out_img += heatmap * col.reshape((1, 1, 3))
     out_img = cv2.resize(out_img, (img_w, img_h),
                          interpolation=cv2.INTER_NEAREST)
     out_img = (255. * out_img).astype(np.uint8)
-    out_img = cv2.addWeighted(out_img, .9, image, 0.1, 0)
+    out_img = cv2.addWeighted(out_img, .6, image, 0.4, 0)
     for i, (kp1, kp2) in enumerate(pairs):
         y_indices_1, x_indices_1 = heatmaps[:, :, kp1].nonzero()
         for x, y in zip(x_indices_1, y_indices_1):
+            x1, y1 = vecmaps[y, x, 4 * i], vecmaps[y, x, 4 * i + 1]
+            x1 = np.around(x + x1).astype(np.uint8)
+            y1 = np.around(y + y1).astype(np.uint8)
             x0 = int(scale_w * (x + 0.5))
             y0 = int(scale_h * (y + 0.5))
-            delta_x = int(scale_w * (
-                vecmaps[y, x, 4 * i] + offsetmaps[y, x, kp2]))
-            delta_y = int(scale_h * (
-                vecmaps[y, x, 4 * i + 1]
-                + offsetmaps[y, x, num_keypoints + kp2]))
+            if (x1 > 0) and (x1 < w - 1) and (y1 > 0) and (y1 < h - 1):
+                delta_x = int(scale_w * (
+                    vecmaps[y, x, 4 * i] + offsetmaps[y1, x1, kp2]))
+                delta_y = int(scale_h * (vecmaps[y, x, 4 * i + 1]
+                                         + offsetmaps[y1, x1, num_keypoints + kp2]))
+            else:
+                delta_x = int(scale_w * (vecmaps[y, x, 4 * i]))
+                delta_y = int(scale_h * (vecmaps[y, x, 4 * i + 1]))
             col = (255. * colors[kp1][:3]).astype(np.uint8)
             col = tuple(map(int, col))
             out_img = cv2.line(out_img, (x0, y0),
@@ -57,13 +70,19 @@ def visualize_heatmaps(image, heatmaps, vecmaps, offsetmaps,
                                col, 1)
         y_indices_2, x_indices_2 = heatmaps[:, :, kp2].nonzero()
         for x, y in zip(x_indices_2, y_indices_2):
+            x1, y1 = vecmaps[y, x, 4 * i + 2], vecmaps[y, x, 4 * i + 3]
+            x1 = np.around(x + x1).astype(np.uint8)
+            y1 = np.around(y + y1).astype(np.uint8)
             x0 = int(scale_w * (x + 0.5))
             y0 = int(scale_h * (y + 0.5))
-            delta_x = int(scale_w * (
-                vecmaps[y, x, 4 * i + 2] + offsetmaps[y, x, kp1]))
-            delta_y = int(scale_h * (
-                vecmaps[y, x, 4 * i + 3]
-                + offsetmaps[y, x, num_keypoints + kp1]))
+            if (x1 > 0) and (x1 < w - 1) and (y1 > 0) and (y1 < h - 1):
+                delta_x = int(scale_w * (
+                    vecmaps[y, x, 4 * i + 2] + offsetmaps[y1, x1, kp1]))
+                delta_y = int(scale_h * (vecmaps[y, x, 4 * i + 3]
+                                         + offsetmaps[y1, x1, num_keypoints + kp1]))
+            else:
+                delta_x = int(scale_w * (vecmaps[y, x, 4 * i + 2]))
+                delta_y = int(scale_h * (vecmaps[y, x, 4 * i + 3]))
             col = (255. * colors[kp2][:3]).astype(np.uint8)
             col = tuple(map(int, col))
             out_img = cv2.line(out_img, (x0, y0),
