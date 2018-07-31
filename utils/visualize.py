@@ -36,8 +36,8 @@ def visualize_heatmaps(image, heatmaps, vecmaps, offsetmaps,
         new_heatmap = np.zeros_like(heatmap)
         y_indices, x_indices = heatmap.nonzero()
         for x, y in zip(x_indices, y_indices):
-            x1 = np.clip(np.around(x + offsetmaps[y, x, i]), 0, w - 1).astype(np.uint8)
-            y1 = np.clip(np.around(y + offsetmaps[y, x, num_keypoints + i]), 0, h - 1).astype(np.uint8)
+            x1 = np.clip(np.around(x + offsetmaps[y, x, 2 * i]), 0, w - 1).astype(np.uint8)
+            y1 = np.clip(np.around(y + offsetmaps[y, x, 2 * i + 1]), 0, h - 1).astype(np.uint8)
             new_heatmap[y1, x1] = 1.
         heatmaps[:, :, i] = new_heatmap
         heatmap = np.tile(np.expand_dims(new_heatmap, axis=2),
@@ -57,9 +57,9 @@ def visualize_heatmaps(image, heatmaps, vecmaps, offsetmaps,
             y0 = int(scale_h * (y + 0.5))
             if (x1 > 0) and (x1 < w - 1) and (y1 > 0) and (y1 < h - 1):
                 delta_x = int(scale_w * (
-                    vecmaps[y, x, 4 * i] + offsetmaps[y1, x1, kp2]))
+                    vecmaps[y, x, 4 * i] + offsetmaps[y1, x1, 2 * kp2]))
                 delta_y = int(scale_h * (vecmaps[y, x, 4 * i + 1]
-                                         + offsetmaps[y1, x1, num_keypoints + kp2]))
+                                         + offsetmaps[y1, x1, 2 * kp2 + 1]))
             else:
                 delta_x = int(scale_w * (vecmaps[y, x, 4 * i]))
                 delta_y = int(scale_h * (vecmaps[y, x, 4 * i + 1]))
@@ -77,9 +77,9 @@ def visualize_heatmaps(image, heatmaps, vecmaps, offsetmaps,
             y0 = int(scale_h * (y + 0.5))
             if (x1 > 0) and (x1 < w - 1) and (y1 > 0) and (y1 < h - 1):
                 delta_x = int(scale_w * (
-                    vecmaps[y, x, 4 * i + 2] + offsetmaps[y1, x1, kp1]))
+                    vecmaps[y, x, 4 * i + 2] + offsetmaps[y1, x1, 2 * kp1]))
                 delta_y = int(scale_h * (vecmaps[y, x, 4 * i + 3]
-                                         + offsetmaps[y1, x1, num_keypoints + kp1]))
+                                         + offsetmaps[y1, x1, 2 * kp1 + 1]))
             else:
                 delta_x = int(scale_w * (vecmaps[y, x, 4 * i + 2]))
                 delta_y = int(scale_h * (vecmaps[y, x, 4 * i + 3]))
