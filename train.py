@@ -93,7 +93,7 @@ class Trainer(object):
         dataset = dataset.prefetch(train_cfg.prefetch_size)
         return dataset
 
-    def prepare_tf_summary(self, features, predictions, max_display=3):
+    def prepare_tf_summary(self, features, predictions, max_display=8):
         batch_size = self.train_cfg.batch_size
         images_in = tf.cast(features['images'], tf.uint8)
         images = tf.split(
@@ -137,7 +137,7 @@ class Trainer(object):
             heatmap_out.append(tf.expand_dims(out, axis=0))
 
         heatmap_out = tf.concat(heatmap_out, axis=0)
-        tf.summary.image('images', images_in[:max_display], max_display)
+        # tf.summary.image('images', images_in[:max_display], max_display)
         tf.summary.image('heatmap', heatmap_out, max_display)
 
     def train(self):

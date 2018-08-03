@@ -64,13 +64,19 @@ class Model:
 
     def offsetmap_loss(self, regs_gt, regs_pred, heatmaps_gt,
                        heatmaps_weights):
-        weights = tf.cast(heatmaps_gt > EPSILON, tf.float32)
-        weights *= heatmaps_weights
-        weights = tf.tile(weights, [1, 1, 1, 2])
+        weights = tf.cast(tf.greater(heatmaps_gt, EPSILON), tf.float32)
+        weights = weights * heatmaps_weights
+        # weights = tf.expand_dims(weights, -1)
+        # weights = tf.tile(weights, [1, 1, 1, 1, 2])
+        # weights = tf.reshape(weights, tf.shape(regs_gt))
         offsetmap_loss = tf.losses.absolute_difference(
             labels=regs_gt,
             predictions=regs_pred,
-            weights=weights)
+            reduction=tf.losses.Reduction.NONE)
+        offsetmap_loss = tf.reshape(offsetmap_loss, [-1, 2])
+        offsetmap_loss = tf.reduce_sum(offsetmap_loss, axis=1)
+        offsetmap_loss = offsetmap_loss * tf.reshape(weights, [-1])
+        offsetmap_loss = tf.reduce_mean(offsetmap_loss)
         return offsetmap_loss
 
     def losses(self, prediction, ground_truth):
