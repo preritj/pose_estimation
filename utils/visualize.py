@@ -88,35 +88,104 @@ def visualize_heatmaps(image, heatmaps, vecmaps, offsetmaps,
     return out_img
 
 
-def greedy_connect(image, heatmaps, vecmaps, offsetmaps,
+def visualize_instances(image, heatmaps, vecmaps, offsetmaps,
+                        pairs=([0, 1], [2, 1]), threshold=0.1):
+    persons = greedy_connect(heatmaps, vecmaps, offsetmaps,
+                             pairs, threshold)
+    colors = cm.hsv(np.linspace(0, 1, len(persons)))
+    out_img = np.zeros_like(image, dtype=np.uint8)
+    out_img = cv2.addWeighted(out_img, .5, image, .5, 0)
+    img_h, img_w, _ = image.shape
+    h, w, num_keypoints = heatmaps.shape
+    scale_h, scale_w = int(img_h / h), int(img_w / w)
+    for i, person in enumerate(persons):
+        col = colors[i]
+        col = col[:3]
+        col = (255. * col).astype(np.uint8)
+        col = tuple(map(int, col))
+        for kp1, kp2 in pairs:
+            x1, y1, v1 = person[kp1]
+            x2, y2, v2 = person[kp2]
+            if (v1 == 0) and (v2 == 0):
+                continue
+            x1, y1 = int(scale_w * (x1 + 0.5)), int(scale_h * (y1 + 0.5))
+            x2, y2 = int(scale_w * (x2 + 0.5)), int(scale_h * (y2 + 0.5))
+            out_img = cv2.line(out_img, (x1, y1),
+                               (x2, y2), col, 1)
+            out_img[max(y1 - 3, 0): min(y1 + 3, img_h),
+                    max(x1 - 3, 0): min(x1 + 3, img_w)] = col
+            out_img[max(y2 - 3, 0): min(y2 + 3, img_h),
+                    max(x2 - 3, 0): min(x2 + 3, img_w)] = col
+    # out_img = cv2.addWeighted(out_img, .5, image, 0.5, 0)
+    return out_img
+
+
+def greedy_connect(heatmaps, vecmaps, offsetmaps,
                    pairs=([0, 1], [2, 1]), threshold=0.1):
     keypoints_graph = defaultdict(list)
-    for kp1, kp2 in pairs:
+    vecmap_indices = {}
+    for i, (kp1, kp2) in enumerate(pairs):
         keypoints_graph[kp1].append(kp2)
         keypoints_graph[kp2].append(kp1)
+        vecmap_indices[(kp1, kp2)] = (4 * i, 4 * i + 1)
+        vecmap_indices[(kp2, kp1)] = (4 * i + 2, 4 * i + 3)
     h, w, num_keypoints = heatmaps.shape
-    y_indices, x_indices, kp_indices = heatmaps > threshold
+    y_indices, x_indices, kp_indices = np.where(heatmaps > threshold)
     scores = heatmaps[y_indices, x_indices, kp_indices]
     ordering = np.argsort(scores)
     keypoints = np.stack((x_indices, y_indices, kp_indices), axis=-1)
     keypoints = list(keypoints[ordering])
     persons = []
+
+    def _travel_graph(seed_, person_):
+        x1, y1, kp1 = seed_
+        person_[kp1] = (x1, y1, 0)
+        for kp2 in keypoints_graph[kp1]:
+            if kp2 in person_.keys():
+                continue
+            x_idx, y_idx = vecmap_indices[(kp1, kp2)]
+            dx, dy = vecmaps[y1, x1, x_idx], vecmaps[y1, x1, y_idx]
+            x2_ = np.floor(x1 + 0.5 + dx).astype(np.int16)
+            y2_ = np.floor(y1 + 0.5 + dy).astype(np.int16)
+            if (x2_ > 0) and (x2_ < w - 1) and (y2_ > 0) and (y2_ < h - 1):
+                x2 = np.floor(x2_ + offsetmaps[y2_, x2_, 2 * kp2]).astype(np.int16)
+                y2 = np.floor(y2_ + offsetmaps[y2_, x2_, 2 * kp2 + 1]).astype(np.int16)
+            else:
+                x2 = x2_
+                y2 = y2_
+            x2 = np.clip(x2, 0, w - 1)
+            y2 = np.clip(y2, 0, h - 1)
+            new_seed_ = (x2, y2, kp2)
+            _travel_graph(new_seed_, person_)
+
     while len(keypoints) > 0:
-        x0, y0, kp0 = keypoints.pop()
+        x, y, kp = keypoints.pop()
         already_exists = False
         for person in persons:
-            x, y = person[kp0]
-            if (abs(x - x0) < 2) and (abs(y - y0) < 2):
+            x1, y1, v1 = person[kp]
+            # person keypoint already matched
+            if v1 > 0.5:
+                continue
+            # person keypoint unmatched and in proximity
+            if (abs(x - x1) < 3) and (abs(y - y1) < 3):
                 already_exists = True
+                person[kp] = (x, y, 1)  # set visibility to 1
                 break
-        if already_exists:
-            continue
-        person = np.zeros((num_keypoints, 2))
-        next_keypoints = [kp0]
-        while True:
-            next_keypoints = keypoints_graph[kp0]
-            for kp in next_keypoints:
-                x1, y1 = vecmaps[y, x, 4 * i], vecmaps[y, x, 4 * i + 1]
+        if not already_exists:
+            new_person = {}
+            # x, y = np.floor(x), np.floor(y)
+            start_seed = (x, y, kp)
+            _travel_graph(start_seed, new_person)
+            new_person[kp] = (x, y, 1)
+            persons.append(dict(new_person))
+
+    persons_final = []
+    for person in persons:
+        n_vis = sum([vis for _, _, vis in person.values()])
+        if n_vis > 3:
+            persons_final.append(person)
+    return persons_final
+
 
 
 

@@ -119,9 +119,15 @@ class Trainer(object):
             num_or_size_splits=batch_size,
             axis=0)
         heatmap_out = []
+        instances_out = []
 
         heatmap_vis_fn = functools.partial(
             vis.visualize_heatmaps,
+            pairs=self.pairs,
+            threshold=0.2)
+
+        instances_vis_fn = functools.partial(
+            vis.visualize_instances,
             pairs=self.pairs,
             threshold=0.2)
 
@@ -135,10 +141,17 @@ class Trainer(object):
                 [image_i, heatmaps_i, vecmaps_i, offsetmaps_i],
                 tf.uint8)
             heatmap_out.append(tf.expand_dims(out, axis=0))
+            out = tf.py_func(
+                instances_vis_fn,
+                [image_i, heatmaps_i, vecmaps_i, offsetmaps_i],
+                tf.uint8)
+            instances_out.append(tf.expand_dims(out, axis=0))
 
         heatmap_out = tf.concat(heatmap_out, axis=0)
+        instances_out = tf.concat(instances_out, axis=0)
         # tf.summary.image('images', images_in[:max_display], max_display)
         tf.summary.image('heatmap', heatmap_out, max_display)
+        tf.summary.image('instances', instances_out, max_display)
 
     def train(self):
         """run training experiment"""
