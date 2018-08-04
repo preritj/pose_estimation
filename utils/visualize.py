@@ -92,7 +92,7 @@ def visualize_instances(image, heatmaps, vecmaps, offsetmaps,
                         pairs=([0, 1], [2, 1]), threshold=0.1):
     persons = greedy_connect(heatmaps, vecmaps, offsetmaps,
                              pairs, threshold)
-    colors = cm.hsv(np.linspace(0, 1, len(persons)))
+    colors = cm.hsv(np.linspace(0, 1, len(persons) + 1))
     out_img = np.zeros_like(image, dtype=np.uint8)
     out_img = cv2.addWeighted(out_img, .5, image, .5, 0)
     img_h, img_w, _ = image.shape
