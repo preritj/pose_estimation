@@ -48,3 +48,12 @@ Post-processed output:
 ![Sample1-postprocess](extras/out_instances.png)
 
 
+Raw output: 
+
+![Sample1-raw](extras/out_heatmap_3.png) 
+
+Post-processed output: 
+
+![Sample1-postprocess](extras/out_instances_3.png)
+
+
