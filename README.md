@@ -54,6 +54,6 @@ Raw output:
 
 Post-processed output: 
 
-![Sample1-postprocess](extras/out_instances_3.png)
+![Sample1-postprocess](extras/out_instance_3.png)
 
 
