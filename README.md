@@ -35,9 +35,14 @@ mpirun -np 16 \
 *  Code for post-processing step using greedy algorithm similar to that defined in https://arxiv.org/abs/1803.08225  can be found in `utils/visualize.py`.
 
 
-### Results
+### Results 
 
-![Sample1-raw](extras/out_heatmap.png)
+Raw output: 
+
+![Sample1-raw](extras/out_heatmap.png) 
+
+Post-processed output: 
+
 ![Sample1-postprocess](extras/out_instances.png)
 
 
