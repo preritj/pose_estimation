@@ -47,7 +47,7 @@ def visualize_heatmaps(image, heatmaps, vecmaps, offsetmaps,
     out_img = cv2.resize(out_img, (img_w, img_h),
                          interpolation=cv2.INTER_NEAREST)
     out_img = (255. * out_img).astype(np.uint8)
-    out_img = cv2.addWeighted(out_img, .45, image, 0.55, 0)
+    out_img = cv2.addWeighted(out_img, 0.4, image, 0.6, 0)
     for i, (kp1, kp2) in enumerate(pairs):
         y_indices_1, x_indices_1 = heatmaps[:, :, kp1].nonzero()
         for x, y in zip(x_indices_1, y_indices_1):
@@ -94,7 +94,7 @@ def visualize_instances(image, heatmaps, vecmaps, offsetmaps,
                              pairs, threshold)
     colors = cm.hsv(np.linspace(0, 1, len(persons) + 1))
     out_img = np.zeros_like(image, dtype=np.uint8)
-    out_img = cv2.addWeighted(out_img, .5, image, .5, 0)
+    out_img = cv2.addWeighted(out_img, 0.4, image, 0.6, 0)
     img_h, img_w, _ = image.shape
     h, w, num_keypoints = heatmaps.shape
     scale_h, scale_w = int(img_h / h), int(img_w / w)

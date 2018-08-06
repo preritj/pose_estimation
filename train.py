@@ -93,7 +93,7 @@ class Trainer(object):
         dataset = dataset.prefetch(train_cfg.prefetch_size)
         return dataset
 
-    def prepare_tf_summary(self, features, predictions, max_display=8):
+    def prepare_tf_summary(self, features, predictions, max_display=4):
         batch_size = self.train_cfg.batch_size
         images_in = tf.cast(features['images'], tf.uint8)
         images = tf.split(
@@ -435,5 +435,5 @@ if __name__ == '__main__':
     assert os.path.exists(config_file), \
         "{} not found".format(config_file)
     trainer = Trainer(config_file)
-    # trainer.train()
-    trainer.freeze_model()
+    trainer.train()
+    # trainer.freeze_model()
