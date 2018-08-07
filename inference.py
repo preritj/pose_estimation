@@ -8,6 +8,7 @@ from glob import glob
 import matplotlib.cm as cm
 from utils.ops import non_max_suppression
 from utils.parse_config import parse_config
+from utils.visualize import visualize_instances
 
 
 class Inference(object):
@@ -364,6 +365,21 @@ class Inference(object):
             return 0
         return 1
 
+    def display_output_full(self, image, heatmaps, vecmaps, offsetmaps,
+                            pairs=([0, 1], [2, 1]), threshold=0.2):
+        img_h, img_w = image.shape[:2]
+        out_img = visualize_instances(image, heatmaps, vecmaps, offsetmaps,
+                                      pairs=pairs, threshold=threshold)
+        scale_ = 768. / min(img_h, img_w)
+        out_img = cv2.resize(out_img, None, fx=scale_, fy=scale_)
+        # out_img = out_img[:, :, ::-1]
+        cv2.imshow('out', out_img)
+        if cv2.waitKey(1) == 27:  # Esc key to stop
+            return 0
+        elif cv2.waitKey(1) & 0xFF == ord('q'):
+            return 0
+        return 1
+
     def run_inference(self):
         sess = tf.Session()
         stats = SpeedStats()
@@ -379,9 +395,9 @@ class Inference(object):
                 stitched_maps, t = self._run_inference(sess, image)
                 stats.update(t)
                 heatmaps, vecmaps, offsetmaps = stitched_maps
-                out = self.display_output(
+                out = self.display_output_full(
                     image, heatmaps, vecmaps, offsetmaps,
-                    pairs=self.pairs, threshold=0.3)
+                    pairs=self.pairs, threshold=0.2)
                 if not out:
                     break
         elif input_type == 'video':
