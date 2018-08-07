@@ -122,7 +122,7 @@ def visualize_instances(image, heatmaps, vecmaps, offsetmaps,
 
 def greedy_connect(heatmaps, vecmaps, offsetmaps,
                    pairs=([0, 1], [2, 1]), threshold=0.1):
-    keypoints_graph = defaultdict(list)
+    keypoints_graph = defaultdict(list)  # person skeleton graph
     vecmap_indices = {}
     for i, (kp1, kp2) in enumerate(pairs):
         keypoints_graph[kp1].append(kp2)
@@ -138,15 +138,19 @@ def greedy_connect(heatmaps, vecmaps, offsetmaps,
     persons = []
 
     def _travel_graph(seed_, person_):
+        """Generates person graph recursively"""
         x1, y1, kp1 = seed_
-        person_[kp1] = (x1, y1, 0)
+        person_[kp1] = (x1, y1, 0)  # by default set visibility to zero
         for kp2 in keypoints_graph[kp1]:
+            # check if kp2 has already been traveled in person graph
             if kp2 in person_.keys():
                 continue
             x_idx, y_idx = vecmap_indices[(kp1, kp2)]
             dx, dy = vecmaps[y1, x1, x_idx], vecmaps[y1, x1, y_idx]
+            # vecmap takes us to adjacent keypoint, offset of 0.5 for center of pixel
             x2_ = np.floor(x1 + 0.5 + dx).astype(np.int16)
             y2_ = np.floor(y1 + 0.5 + dy).astype(np.int16)
+            # if keypoint is not out of frame, do refinement with offsetmap
             if (x2_ > 0) and (x2_ < w - 1) and (y2_ > 0) and (y2_ < h - 1):
                 x2 = np.floor(x2_ + offsetmaps[y2_, x2_, 2 * kp2]).astype(np.int16)
                 y2 = np.floor(y2_ + offsetmaps[y2_, x2_, 2 * kp2 + 1]).astype(np.int16)
@@ -159,11 +163,11 @@ def greedy_connect(heatmaps, vecmaps, offsetmaps,
             _travel_graph(new_seed_, person_)
 
     while len(keypoints) > 0:
-        x, y, kp = keypoints.pop()
+        x, y, kp = keypoints.pop()  # pops highest score keypoint
         already_exists = False
         for person in persons:
             x1, y1, v1 = person[kp]
-            # person keypoint already matched
+            # person keypoint already matched to a previous keypoint
             if v1 > 0.5:
                 continue
             # person keypoint unmatched and in proximity
@@ -171,14 +175,19 @@ def greedy_connect(heatmaps, vecmaps, offsetmaps,
                 already_exists = True
                 person[kp] = (x, y, 1)  # set visibility to 1
                 break
+
+        # keypoint not found in any existing person, so we create a new one
         if not already_exists:
             new_person = {}
             # x, y = np.floor(x), np.floor(y)
             start_seed = (x, y, kp)
             _travel_graph(start_seed, new_person)
+            # explicitly set visibility of kp to 1
+            # _travel_graph by default sets visibility of all keypoints to 0
             new_person[kp] = (x, y, 1)
             persons.append(dict(new_person))
 
+    # remove false positives by requiring at least 4 keypoints to be visible
     persons_final = []
     for person in persons:
         n_vis = sum([vis for _, _, vis in person.values()])
