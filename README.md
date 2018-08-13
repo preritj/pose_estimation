@@ -32,6 +32,7 @@ mpirun -np 16 \
 
 ### Pre-trained model
 * Pre-trained model is available in `models/latest`. You may have a look at `inference.py` on how to use the frozen model. 
+* The model is fine-tuned for cameras mounted on top. So do not expect model to work on more front-view images such as those found in COCO dataset. Contributions are always welcome!
 * This model uses Mobilenet backbone for real-time inference.
 * Model is fully-convolutional and supports RGB image of any dimensions (multiple of 16).
 * Code for post-processing step using greedy algorithm similar to that defined in https://arxiv.org/abs/1803.08225  can be found in `utils/visualize.py`.
