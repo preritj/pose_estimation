@@ -199,7 +199,7 @@ final_depth: 160
 model_dir: models/latest
 frozen_model: frozen_model.pb
 # network_input_shape: [432, 768]
-network_input_shape: [576, 768]
+network_input_shape: [432, 768]  # [576, 768]
 
 # out_stride determines the output shape of network
 # For example, if input image is 320 x 320
@@ -222,7 +222,7 @@ out_stride: 8
 # resize_shape: [320, 426]
 # resize_shape: [456, 800]
 # resize_shape: [432, 768]
-resize_shape: [576, 768]
+resize_shape: [432, 768] #[576, 768]
 
 # overlapping patches are encouraged
 # for more robust prediction near edge of patches
@@ -240,13 +240,15 @@ strides: [1, 1]
 flip_top_down: false
 
 # input_type can be images, video or camera
-input_type: camera
+input_type: video
 # images can be a list or use *
 images: /media/storage/AVAretail/MasterCard/*.jpg
 # images: /media/easystore/TrainData/Walmart/Round1/Recording_2/20180308_*.jpg
 #images: /media/easystore/TrainData/Lab/April20/Recording_44/20180420_*.jpg
 
-video: /media/easystore/TrainData/Lab/April20/Recording_44/20180420_0000000.avi
+# video: /media/easystore/TrainData/Lab/April20/Recording_44/20180420_0000000.avi
+video: /media/admin-u/easystore/TrainData/StLouis/Kinect/8-28-2018/G2/Recording_53/20180827_0000000.avi
+# video: /media/admin-u/easystore/TrainData/StLouis/Kinect/8-28-2018/G6/Recording_56/20180827_0000000.avi
 
 camera: http://root:123456@192.168.1.16/mjpg/video.mjpg
 

@@ -357,7 +357,7 @@ class Inference(object):
                                    col, 1)
         scale_ = 768. / min(img_h, img_w)
         out_img = cv2.resize(out_img, None, fx=scale_, fy=scale_)
-        # out_img = out_img[:, :, ::-1]
+        out_img = out_img[:, :, ::-1]
         cv2.imshow('out', out_img)
         if cv2.waitKey(1) == 27:  # Esc key to stop
             return 0
