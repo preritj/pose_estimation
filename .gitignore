@@ -1,4 +1,4 @@
-.idea/
+.i:dea/
 *.ipynb
 !test.ipynb
 .ipynb_checkpoints/
@@ -10,4 +10,4 @@ __pycache__/
 # visual studio files
 /.vs
 *.user
-README.md
+# README.md
