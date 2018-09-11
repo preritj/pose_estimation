@@ -1,4 +1,4 @@
-.i:dea/
+.idea/
 *.ipynb
 !test.ipynb
 .ipynb_checkpoints/
