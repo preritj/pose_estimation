@@ -1,15 +1,12 @@
-#.idea/
-#*.ipynb
-#!test.ipynb
-#.ipynb_checkpoints/
-#models/*
-#models/latest
-#__pycache__/
-#*/__pycache__/
-#
-## visual studio files
-#/.vs
-#*.user
-*
-*/
-!README.md
+.idea/
+*.ipynb
+!test.ipynb
+.ipynb_checkpoints/
+models/*
+models/latest
+__pycache__/
+*/__pycache__/
+
+# visual studio files
+/.vs
+*.user
