@@ -1,3 +1,6 @@
+*
+*/
+!README
 .idea/
 *.ipynb
 !test.ipynb
